@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../database/database.dart';
 import '../../providers/app_providers.dart';
-import 'new_wall_dialog.dart';
+import '../../providers/backup_provider.dart';
 import '../../widgets/wide.dart';
+import 'new_wall_dialog.dart';
 
 /// The root screen: every wall, in the user's order. Shown even with a single
 /// wall, so there is always one obvious place to add another.
@@ -46,7 +47,10 @@ class WallListScreen extends ConsumerWidget {
         error:   (e, _) => Center(child: Text('$e')),
         data:    (list) => list.isEmpty
             ? _FirstRun(onCreate: () => _newWall(context, ref))
-            : _WallList(walls: list),
+            : Column(children: [
+                const _BackupNudge(),
+                Expanded(child: _WallList(walls: list)),
+              ]),
       ),
     );
   }
@@ -83,6 +87,49 @@ class _WallList extends ConsumerWidget {
             ),
         ],
       ));
+}
+
+/// Nothing here syncs anywhere, so this is the one reminder the app gives: a
+/// quiet line once the last full export is a month behind (or never
+/// happened), dismissable for a week at a time.
+class _BackupNudge extends ConsumerWidget {
+  const _BackupNudge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(backupProvider);
+    final now    = ref.watch(clockProvider)();
+    if (!status.needsReminder(now)) return const SizedBox.shrink();
+
+    final days  = status.daysSinceBackup(now);
+    final color = Theme.of(context).colorScheme.error;
+    return Material(
+      key:   const ValueKey('backup-nudge'),
+      color: color.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+        child: Row(children: [
+          Icon(Icons.warning_amber_rounded, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(days == null
+                ? 'Your walls have never been backed up.'
+                : 'Last backup was $days days ago.'),
+          ),
+          TextButton(
+            onPressed: () => context.go('/settings'),
+            child: const Text('Back up'),
+          ),
+          IconButton(
+            tooltip:   'Remind me later',
+            icon:      const Icon(Icons.close, size: 18),
+            onPressed: () =>
+                ref.read(backupProvider.notifier).snoozeReminder(now),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 String gradeScaleLabel(GradeScale s) => switch (s) {

@@ -65,7 +65,10 @@ seed builders that go through the app's own database API, `jpegFixture()`
 `FakePhotoSource` in place of the picker and the photo import run inline
 (an isolate never finishes under fake time). `pumpApp` opens a 400×800
 phone window (the test default, 800×600, would be a wide window); pass
-`size:` for a wide one.
+`size:` for a wide one. It also puts a `FakeShare` in place of the share
+sheet / save dialog / download, takes a `clock:` for the backup reminder,
+and with `keepPrefs: true` reopens the app over what the last run stored
+(how a test lets days pass).
 
 Widget tests run in fake time, where a drift stream (`watch…().first`) never
 completes: read streams inside `tester.runAsync` (one-shot queries and writes

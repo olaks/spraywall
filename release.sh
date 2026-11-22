@@ -51,6 +51,8 @@ Manual checklist (spec: Testing Decisions):
   [ ] Android: with "Don't keep activities" on, a camera photo is still added
   [ ] Linux: picking a wall photo from a file works
   [ ] Marks look right on the sample wall photo
+  [ ] Export everything: the share sheet on Android, a save dialog on Linux,
+      a download on the web; the .zip opens and holds backup.json + photos/
 CHECKLIST
 
 echo "Building release APK..."

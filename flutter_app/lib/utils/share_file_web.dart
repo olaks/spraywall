@@ -1,17 +1,18 @@
-import 'dart:convert';
-// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
-import 'dart:html' as html;
+import 'dart:async';
+import 'dart:js_interop';
+import 'dart:typed_data';
 
-Future<void> shareJsonFile(String content, String filename) async {
-  final bytes = utf8.encode(content);
-  // ignore: deprecated_member_use
-  final blob  = html.Blob([bytes], 'application/json');
-  // ignore: deprecated_member_use
-  final url   = html.Url.createObjectUrlFromBlob(blob);
-  // ignore: deprecated_member_use
-  html.AnchorElement(href: url)
-    ..setAttribute('download', filename)
+import 'package:web/web.dart' as web;
+
+/// A browser can only download: a link to the bytes, clicked. The link is
+/// freed a little later, once the download has surely started.
+Future<bool> shareFile(Uint8List bytes, String fileName, String mimeType) async {
+  final blob = web.Blob([bytes.toJS].toJS, web.BlobPropertyBag(type: mimeType));
+  final url  = web.URL.createObjectURL(blob);
+  web.HTMLAnchorElement()
+    ..href     = url
+    ..download = fileName
     ..click();
-  // ignore: deprecated_member_use
-  html.Url.revokeObjectUrl(url);
+  Timer(const Duration(seconds: 30), () => web.URL.revokeObjectURL(url));
+  return true;
 }

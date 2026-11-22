@@ -3,8 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/format_utils.dart';
 
 /// The app keeps everything in a local database with no sync, so an export is
-/// the only thing standing between a lost phone and a lost set of walls and problems.
-/// This tracks when one last happened.
+/// the only thing standing between a lost phone and a lost set of walls and
+/// problems. This tracks when the last full one happened: exporting one wall
+/// leaves the rest unprotected, so it doesn't count.
 
 const _kLastBackupKey = 'last_backup_date';
 const _kSnoozeKey     = 'backup_reminder_snoozed';
@@ -67,3 +68,22 @@ final prefsProvider = Provider<SharedPreferences>(
 
 final backupProvider =
     NotifierProvider<BackupNotifier, BackupStatus>(BackupNotifier.new);
+
+/// Now, as the backup reminder sees it. Overridden in tests to move time on.
+final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+
+/// How exposed the data is, in plain words, for the Settings card.
+String backupStatusText(BackupStatus status, DateTime now, {required bool hasData}) {
+  final days = status.daysSinceBackup(now);
+  if (days == null) {
+    return hasData
+        ? 'Never backed up. This device holds the only copy of your walls '
+            'and problems.'
+        : 'No walls yet: nothing to back up.';
+  }
+  if (days == 0) return 'Backed up today.';
+  if (days == 1) return 'Backed up yesterday.';
+  if (days < kBackupStaleDays) return 'Backed up $days days ago.';
+  return 'Last backup was $days days ago. Anything set since then exists '
+      'only on this device.';
+}

@@ -65,6 +65,27 @@ class DeletedLayout {
   });
 }
 
+/// What a backup holds, read in one transaction so it is consistent: rows in
+/// the order the app shows them, marks in drawing order, and each photo's
+/// stored JPEG (not its thumbnail, which import regenerates).
+class BackupRows {
+  final List<Wall>             walls;
+  final List<Layout>           layouts;
+  final List<WallPhoto>        photos;
+  final List<Problem>          problems;
+  final List<Mark>             marks;
+  final Map<String, Uint8List> photoData;
+
+  const BackupRows({
+    required this.walls,
+    required this.layouts,
+    required this.photos,
+    required this.problems,
+    required this.marks,
+    required this.photoData,
+  });
+}
+
 /// What a reset did, for [AppDatabase.undoReset].
 typedef LayoutReset = ({String archivedId, String newId});
 
@@ -749,6 +770,50 @@ class AppDatabase extends _$AppDatabase {
         id: Value(m.id), problemId: problemId, photoId: m.photoId,
         role: m.role, cx: m.cx, cy: m.cy, r: m.r,
       );
+
+  // ── Backups ────────────────────────────────────────────────────────────
+
+  /// Everything, or the wall [wallId] with all its layouts, for a backup. A
+  /// fixed number of statements, however much there is.
+  Future<BackupRows> backupRows({String? wallId}) => transaction(() async {
+        final ws = await (select(walls)
+              ..where((w) => wallId == null
+                  ? const Constant(true)
+                  : w.id.equals(wallId))
+              ..orderBy([(w) => OrderingTerm(expression: w.sortOrder)]))
+            .get();
+        final wallIds = [for (final w in ws) w.id];
+        final ls = await (select(layouts)
+              ..where((l) => l.wallId.isIn(wallIds))
+              ..orderBy([(l) => OrderingTerm(expression: l.startedOn),
+                         (l) => OrderingTerm(expression: l.id)]))
+            .get();
+        final layoutIds = [for (final l in ls) l.id];
+        final ps = await (select(wallPhotos)
+              ..where((p) => p.layoutId.isIn(layoutIds))
+              ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+            .get();
+        final probs = await (select(problems)
+              ..where((p) => p.layoutId.isIn(layoutIds))
+              ..orderBy([(p) => OrderingTerm(expression: p.name)]))
+            .get();
+        final ms = await (select(marks)
+              ..where((m) => m.problemId.isIn([for (final p in probs) p.id]))
+              ..orderBy([(_) => OrderingTerm(expression: _rowid)]))
+            .get();
+        // Only the full-size bytes: a thumbnail is a quarter of the size
+        // again, and import makes its own.
+        final data = await (selectOnly(wallPhotoBytes)
+              ..addColumns([wallPhotoBytes.photoId, wallPhotoBytes.data])
+              ..where(wallPhotoBytes.photoId.isIn([for (final p in ps) p.id])))
+            .map((r) => MapEntry(
+                r.read(wallPhotoBytes.photoId)!, r.read(wallPhotoBytes.data)!))
+            .get();
+        return BackupRows(
+          walls: ws, layouts: ls, photos: ps, problems: probs, marks: ms,
+          photoData: Map.fromEntries(data),
+        );
+      });
 
   /// Throws [ArgumentError] unless [grade] is null or on the scale of the
   /// layout's wall.

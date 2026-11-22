@@ -42,8 +42,12 @@ dependencies:
   # Photo import: decode, orient, downscale, strip EXIF, re-encode. Also makes
   # the JPEG fixtures in test/helpers.
   image: ^4.5.4
+  # Backups are a zip of backup.json and the photos. Already pulled in by
+  # image; listed here because the app uses it directly.
+  archive: ^4.0.0
 
-  # Browser APIs (navigator.storage.persist) without dart:html.
+  # Browser APIs (navigator.storage.persist, the backup download) without
+  # dart:html.
   web: ^1.1.1
 
 dev_dependencies:

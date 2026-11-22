@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../database/database.dart';
 
-enum EditWallResult { saved, deleted }
+enum EditWallResult { saved, exported, deleted }
 
-/// Renames a wall and sets its grade scale, or asks for it to be deleted.
-/// Saving happens here, so a clashing name can be refused in place; deleting
-/// is left to the caller, which has to leave the wall's screen first.
+/// Renames a wall and sets its grade scale, or asks for it to be exported or
+/// deleted. Saving happens here, so a clashing name can be refused in place;
+/// exporting and deleting are left to the caller, which shows how they went
+/// (and, to delete, has to leave the wall's screen first).
 class EditWallDialog extends StatefulWidget {
   final AppDatabase db;
   final Wall        wall;
@@ -90,6 +91,13 @@ class _EditWallDialogState extends State<EditWallDialog> {
             ),
           ],
           const SizedBox(height: 24),
+          TextButton.icon(
+            onPressed: _busy
+                ? null
+                : () => Navigator.of(context).pop(EditWallResult.exported),
+            icon:  const Icon(Icons.download),
+            label: const Text('Export this wall'),
+          ),
           TextButton.icon(
             onPressed: _busy
                 ? null

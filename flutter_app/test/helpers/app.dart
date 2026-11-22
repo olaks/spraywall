@@ -12,6 +12,7 @@ import 'package:spraywall/photos/photo_source.dart';
 import 'package:spraywall/providers/app_providers.dart';
 import 'package:spraywall/providers/backup_provider.dart';
 import 'package:spraywall/providers/theme_provider.dart';
+import 'package:spraywall/utils/share_file.dart';
 
 /// Hands over fixture bytes instead of opening a picker, and records what
 /// was asked of it.
@@ -43,23 +44,41 @@ class FakePhotoSource implements PhotoSource {
   }
 }
 
+/// Stands in for the share sheet, save dialog or download: keeps what it
+/// was handed, and says it went somewhere unless [backOut] is set.
+class FakeShare {
+  final files = <({Uint8List bytes, String name, String mimeType})>[];
+  bool backOut = false;
+
+  Future<bool> call(Uint8List bytes, String name, String mimeType) async {
+    files.add((bytes: bytes, name: name, mimeType: mimeType));
+    return !backOut;
+  }
+}
+
 /// A phone held upright: the narrow layout. Wide-window tests pass their
 /// own [pumpApp] size.
 const phone = Size(400, 800);
 
 /// Pumps the whole app, starting at '/', over [db] and empty preferences, in
-/// a window of [size] logical pixels (a phone unless given).
+/// a window of [size] logical pixels (a phone unless given). [clock] stands
+/// in for `DateTime.now` where the backup reminder reads it. With
+/// [keepPrefs] it reopens the app over what the last run stored, as a user
+/// coming back days later would.
 /// Photo import runs inline: an isolate never finishes under fake time.
 Future<void> pumpApp(
   WidgetTester tester,
   AppDatabase  db, {
   PhotoSource? photos,
   Size         size = phone,
+  FakeShare?   share,
+  DateTime Function()? clock,
+  bool         keepPrefs = false,
 }) async {
   tester.view.physicalSize     = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  SharedPreferences.setMockInitialValues({});
+  if (!keepPrefs) SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
   await tester.pumpWidget(ProviderScope(
     overrides: [
@@ -68,6 +87,8 @@ Future<void> pumpApp(
       themeIndexProvider.overrideWith(() => ThemeNotifier(0, prefs)),
       photoSourceProvider.overrideWithValue(photos ?? FakePhotoSource()),
       photoImporterProvider.overrideWithValue((bytes) async => importPhoto(bytes)),
+      shareFileProvider.overrideWithValue((share ?? FakeShare()).call),
+      if (clock != null) clockProvider.overrideWithValue(clock),
     ],
     child: const SpraywallApp(),
   ));

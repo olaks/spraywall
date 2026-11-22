@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../backup/backup_export.dart';
 import '../../database/database.dart';
 import '../../marks/mark_editor.dart';
 import '../../photos/add_photo.dart';
 import '../../problems/browse.dart';
 import '../../providers/app_providers.dart';
+import '../../providers/backup_provider.dart';
 import '../../utils/grades.dart';
+import '../../utils/share_file.dart';
 import '../../utils/undo_snackbar.dart';
 import '../../widgets/marked_thumb.dart';
+import '../../widgets/wide.dart';
 import '../not_found_screen.dart';
 import 'edit_wall_dialog.dart';
 import 'reset_dialog.dart';
-import '../../widgets/wide.dart';
 
 /// A wall's current layout: its problems, filtered and sorted, each row with
 /// its grade, set date and the first photo it is marked on.
@@ -58,6 +61,9 @@ class WallScreen extends ConsumerWidget {
       context: context,
       builder: (_) => EditWallDialog(db: db, wall: wall, hasGrades: hasGrades),
     );
+    if (result == EditWallResult.exported) {
+      return _exportWall(ref, messenger, db, wall);
+    }
     if (result != EditWallResult.deleted || !context.mounted) return;
 
     // Leave before deleting, so this screen never shows the wall as missing.
@@ -66,6 +72,24 @@ class WallScreen extends ConsumerWidget {
     showUndoSnackBar(messenger,
         message: 'Deleted "${wall.name}"',
         onUndo:  () => db.restoreWall(deleted));
+  }
+
+  /// One wall with all its layouts, in the same format as a full backup.
+  /// It doesn't reset the backup reminder: the other walls aren't in it.
+  Future<void> _exportWall(WidgetRef ref, ScaffoldMessengerState messenger,
+      AppDatabase db, Wall wall) async {
+    final now   = ref.read(clockProvider)();
+    final share = ref.read(shareFileProvider);
+    try {
+      final bytes = await exportBackup(db, wallId: wall.id, now: now);
+      if (await share(bytes, backupFileName(now, wallName: wall.name),
+          'application/zip')) {
+        messenger.showSnackBar(
+            SnackBar(content: Text('Exported "${wall.name}"')));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+    }
   }
 
   @override
