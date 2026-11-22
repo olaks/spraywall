@@ -43,6 +43,15 @@ git -c user.email="$COMMIT_EMAIL" -c user.name="$COMMIT_NAME" \
   commit -q -m "Deploy web build v$VERSION"
 git push -u --force origin gh-pages
 
+# A new repo has no Pages site yet: switch it on, serving gh-pages. GitHub
+# may do that itself moments after the first gh-pages push, so "already
+# enabled" is fine.
+if ! gh api "/repos/$REPO/pages" >/dev/null 2>&1; then
+  echo "Enabling GitHub Pages (branch gh-pages, path /)..."
+  gh api -X POST "/repos/$REPO/pages" \
+    -f 'source[branch]=gh-pages' -f 'source[path]=/' >/dev/null 2>&1 || true
+fi
+
 echo "Triggering GitHub Pages build..."
 gh api -X POST "/repos/$REPO/pages/builds" >/dev/null
 
