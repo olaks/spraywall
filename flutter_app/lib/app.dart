@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'photos/add_photo.dart';
 import 'providers/theme_provider.dart';
 import 'screens/not_found_screen.dart';
+import 'screens/photos/photo_viewer_screen.dart';
+import 'screens/photos/photos_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/walls/wall_list_screen.dart';
 import 'screens/walls/wall_screen.dart';
@@ -22,6 +25,22 @@ GoRouter buildRouter() => GoRouter(
           path: 'walls/:wallId',
           builder: (_, state) =>
               WallScreen(wallId: state.pathParameters['wallId']!),
+          routes: [
+            GoRoute(
+              path: 'photos',
+              builder: (_, state) =>
+                  PhotosScreen(wallId: state.pathParameters['wallId']!),
+              routes: [
+                GoRoute(
+                  path: ':photoId',
+                  builder: (_, state) => PhotoViewerScreen(
+                    wallId:  state.pathParameters['wallId']!,
+                    photoId: state.pathParameters['photoId']!,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     ),
@@ -38,6 +57,18 @@ class SpraywallApp extends ConsumerStatefulWidget {
 class _SpraywallAppState extends ConsumerState<SpraywallApp> {
   // One router per app instance, so each widget test starts at '/'.
   late final GoRouter _router = buildRouter();
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (await recoverLostPhoto(ref)) {
+        _messenger.currentState?.showSnackBar(const SnackBar(
+            content: Text('Added the wall photo you took before the app closed')));
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -52,6 +83,7 @@ class _SpraywallAppState extends ConsumerState<SpraywallApp> {
       title:                      'Spraywall',
       theme:                      buildTheme(themeAccents[idx].color),
       routerConfig:               _router,
+      scaffoldMessengerKey:       _messenger,
       debugShowCheckedModeBanner: false,
     );
   }

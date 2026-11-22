@@ -6,7 +6,7 @@ Spec: [Spraywall MVP](../../spraywall-spec/spec.md)
 
 **Blocked by:** 01
 
-**Status:** done (2026-11-22), uncommitted
+**Status:** done (2026-11-22), commit d2174a7
 
 - [x] Rename keeps names unique ignoring case
 - [x] Grade scale editable only while none of the wall's problems (any layout) has a grade; otherwise locked with a short explanation

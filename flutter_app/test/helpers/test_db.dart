@@ -1,6 +1,9 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:spraywall/database/database.dart';
+import 'package:spraywall/photos/photo_import.dart';
+
+import 'images.dart';
 
 /// A fresh in-memory database. Foreign keys are on, as in the app: the pragma
 /// runs in `beforeOpen`, which drift calls on first use.
@@ -20,6 +23,22 @@ Future<String> seedWall(
   DateTime?  today,
 }) =>
     db.createWall(name: name, gradeScale: gradeScale, today: today);
+
+/// A wall photo added to [layoutId] through the real import, from a small
+/// generated JPEG. Returns the photo's id.
+Future<String> seedPhoto(
+  AppDatabase db,
+  String      layoutId, {
+  String?     label,
+  int         width  = 40,
+  int         height = 30,
+}) =>
+    db.addPhoto(layoutId, importPhoto(jpegFixture(width: width, height: height)),
+        label: label);
+
+/// The id of the wall's current layout.
+Future<String> currentLayoutId(AppDatabase db, String wallId) async =>
+    (await db.watchCurrentLayout(wallId).first)!.id;
 
 /// Counts every statement that reaches the database, so a test can check
 /// that an import's cost doesn't grow with its row count.

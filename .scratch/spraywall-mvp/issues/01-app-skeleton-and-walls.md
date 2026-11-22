@@ -6,7 +6,7 @@ Spec: [Spraywall MVP](../../spraywall-spec/spec.md)
 
 **Blocked by:** None (can start immediately)
 
-**Status:** done (spraywall-11, 2026-11-22), awaiting first commit
+**Status:** done (2026-11-22), commit 0d16e34
 
 - [x] Repository started (git) with the plumbing copied from `training_logger` per the spec's *Stack and what is copied* (theme, undo snackbar, grades, share/pick helpers, web SQLite files, scripts, pre-commit hook, analysis options, pubspec pins with their comments), renamed
 - [x] Schema v1 with all six tables, UUIDv7 ids (ADR 0001), foreign keys on in `beforeOpen`, FK indexes and the current-layout partial unique index; schema dump committed

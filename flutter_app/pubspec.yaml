@@ -36,6 +36,16 @@ dependencies:
   path_provider: ^2.1.5
   shared_preferences: ^2.5.5
 
+  # Wall photos: camera (where supported) or a file. Only the picker: resizing,
+  # orientation and EXIF stripping are done by `image` (lib/photos/).
+  image_picker: ^1.2.4
+  # Photo import: decode, orient, downscale, strip EXIF, re-encode. Also makes
+  # the JPEG fixtures in test/helpers.
+  image: ^4.5.4
+
+  # Browser APIs (navigator.storage.persist) without dart:html.
+  web: ^1.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -44,9 +54,6 @@ dev_dependencies:
   build_runner: ^2.4.9
   # Raw connection used by migration tests to write a pre-upgrade database.
   sqlite3: ^3.3.0
-  # Generates the JPEG fixtures in test/helpers. Moves to dependencies when
-  # photo import (ticket 03) uses it in the app.
-  image: ^4.5.4
 
 flutter:
   uses-material-design: true

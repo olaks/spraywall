@@ -14,25 +14,13 @@ void main() {
 
   Future<Wall> wallById(String id) async => (await db.watchWall(id).first)!;
 
-  // Photos and problems have no API until tickets 03 and 04, so these insert
-  // rows directly. Swap them for the real calls once those land.
+  // Problems have no API until ticket 04, so these insert rows directly.
+  // Swap them for the real calls once it lands.
   Future<String> addLayout(String wallId, {String? endedOn}) async {
     final id = newId();
     await db.into(db.layouts).insert(LayoutsCompanion.insert(
         id: Value(id), wallId: wallId, startedOn: '2025-01-01',
         endedOn: Value(endedOn)));
-    return id;
-  }
-
-  Future<String> addPhoto(String layoutId, {int sortOrder = 0}) async {
-    final id = newId();
-    await db.into(db.wallPhotos).insert(WallPhotosCompanion.insert(
-        id: Value(id), layoutId: layoutId, sortOrder: sortOrder,
-        width: 2560, height: 1920, addedOn: '2025-01-02'));
-    await db.into(db.wallPhotoBytes).insert(WallPhotoBytesCompanion.insert(
-        photoId: id,
-        data: Uint8List.fromList([1, 2, 3, sortOrder]),
-        thumb: Uint8List.fromList([4, 5, sortOrder])));
     return id;
   }
 
@@ -48,9 +36,6 @@ void main() {
       db.into(db.marks).insert(MarksCompanion.insert(
           problemId: problemId, photoId: photoId, role: role,
           cx: 0.25, cy: 0.5, r: 0.03));
-
-  Future<String> currentLayoutId(String wallId) async =>
-      (await db.watchCurrentLayout(wallId).first)!.id;
 
   group('rename', () {
     test('trims, and may change only the case of its own name', () async {
@@ -72,7 +57,7 @@ void main() {
   group('grade scale', () {
     test('changes while no problem has a grade', () async {
       final id = await seedWall(db);
-      await addProblem(await currentLayoutId(id), 'Ungraded');
+      await addProblem(await currentLayoutId(db, id), 'Ungraded');
       expect(await db.wallHasGrades(id), isFalse);
       await db.editWall(id, name: 'Home wall', gradeScale: GradeScale.v);
       expect((await wallById(id)).gradeScale, GradeScale.v);
@@ -97,7 +82,7 @@ void main() {
 
     test("another wall's grades don't lock it", () async {
       final other = await seedWall(db, name: 'Other');
-      await addProblem(await currentLayoutId(other), 'P', grade: '7A');
+      await addProblem(await currentLayoutId(db, other), 'P', grade: '7A');
       expect(await db.wallHasGrades(await seedWall(db)), isFalse);
     });
   });
@@ -114,11 +99,11 @@ void main() {
     /// A wall with a current and a past layout, photos, problems and marks.
     Future<String> fullWall(String name) async {
       final id      = await seedWall(db, name: name);
-      final current = await currentLayoutId(id);
+      final current = await currentLayoutId(db, id);
       final past    = await addLayout(id, endedOn: '2025-06-01');
       for (final layout in [current, past]) {
-        final p1 = await addPhoto(layout);
-        final p2 = await addPhoto(layout, sortOrder: 1);
+        final p1 = await seedPhoto(db, layout);
+        final p2 = await seedPhoto(db, layout);
         final a  = await addProblem(layout, 'Arête', grade: '6B');
         final b  = await addProblem(layout, 'Crimps');
         await addMark(a, p1, Role.start);

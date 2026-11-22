@@ -61,12 +61,17 @@ ticket lists the tests that close it.
 Shared helpers live in `test/helpers/`: `openTestDb()` (foreign keys on),
 seed builders that go through the app's own database API, `jpegFixture()`
 (generated JPEGs with optional EXIF orientation and fake GPS),
-`StatementCounter`, and `pumpApp()`/`teardownTree()` for widget tests.
+`StatementCounter`, and `pumpApp()` for widget tests, with a
+`FakePhotoSource` in place of the picker and the photo import run inline
+(an isolate never finishes under fake time).
 
 Widget tests run in fake time, where a drift stream (`watch…().first`) never
 completes: read streams inside `tester.runAsync` (one-shot queries and writes
-complete without it), and advance the clock a millisecond before the tree is
-torn down so drift's stream-close timer can run (`teardownTree`). A button
+complete without it), and advance the clock a millisecond after the tree is
+torn down so drift's stream-close timer can run (`teardownTree`). Write app
+widget tests with `testApp`, which runs it after the body, pass or fail: the
+binding checks timers before any `addTearDown`, and a failed test that skips
+it hangs the runner for minutes. A button
 enabled by `setState` needs a `pump()` before it can be tapped. A reorder
 drag moves in steps (`moveTo` plus `pump` in a loop) to a point measured from
 the target row; one long jump lands short.

@@ -46,7 +46,9 @@ flutter build web --wasm
 cat <<'CHECKLIST'
 Manual checklist (spec: Testing Decisions):
   [ ] Web: add a photo, reload; it is still there and storage is OPFS, not memory
+  [ ] Web: navigator.storage.persisted() is true (or the browser asked)
   [ ] Android: taking a wall photo with the camera works
+  [ ] Android: with "Don't keep activities" on, a camera photo is still added
   [ ] Linux: picking a wall photo from a file works
   [ ] Marks look right on the sample wall photo
 CHECKLIST

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import '../photos/photo_import.dart';
 import '../utils/format_utils.dart';
 import 'tables.dart';
 export 'tables.dart' show GradeScale, Role, newId;
@@ -43,6 +44,23 @@ class DeletedWall {
     required this.problems,
     required this.marks,
   });
+}
+
+/// Thrown when a photo would be deleted while marks sit on it.
+class PhotoInUse implements Exception {
+  /// The problems with marks on the photo, by name, retired ones included.
+  final List<String> problems;
+  const PhotoInUse(this.problems);
+
+  @override
+  String toString() => 'Marks on this photo belong to ${problems.join(', ')}';
+}
+
+/// What [AppDatabase.deletePhoto] removed, for [AppDatabase.restorePhoto].
+class DeletedPhoto {
+  final WallPhoto      photo;
+  final WallPhotoImage image;
+  const DeletedPhoto({required this.photo, required this.image});
 }
 
 /// [name] if no name in [taken] matches it ignoring case, otherwise the first
@@ -96,6 +114,10 @@ class AppDatabase extends _$AppDatabase {
   /// One wall, or null once it is gone (or never existed).
   Stream<Wall?> watchWall(String id) =>
       (select(walls)..where((w) => w.id.equals(id))).watchSingleOrNull();
+
+  /// One layout, current or archived, or null if it doesn't exist.
+  Future<Layout?> layout(String id) =>
+      (select(layouts)..where((l) => l.id.equals(id))).getSingleOrNull();
 
   /// The wall's current layout. Every wall has one from the moment it is
   /// created, so this only emits null for a wall that doesn't exist.
@@ -243,5 +265,109 @@ class AppDatabase extends _$AppDatabase {
           b.insertAll(problems,       d.problems);
           b.insertAll(marks,          d.marks);
         });
+      });
+
+  // ── Wall photos ────────────────────────────────────────────────────────
+
+  /// A layout's photos in the user's order, without their bytes.
+  Stream<List<WallPhoto>> watchPhotos(String layoutId) => (select(wallPhotos)
+        ..where((p) => p.layoutId.equals(layoutId))
+        ..orderBy([(p) => OrderingTerm(expression: p.sortOrder)]))
+      .watch();
+
+  /// One photo's metadata, or null once it is gone.
+  Stream<WallPhoto?> watchPhoto(String id) =>
+      (select(wallPhotos)..where((p) => p.id.equals(id))).watchSingleOrNull();
+
+  /// How many problems have marks on each of the layout's photos. Photos no
+  /// mark uses are missing from the map.
+  Stream<Map<String, int>> watchPhotoUsage(String layoutId) {
+    final count = marks.problemId.count(distinct: true);
+    final query = selectOnly(marks).join([
+      innerJoin(wallPhotos, wallPhotos.id.equalsExp(marks.photoId)),
+    ])
+      ..addColumns([marks.photoId, count])
+      ..where(wallPhotos.layoutId.equals(layoutId))
+      ..groupBy([marks.photoId]);
+    return query.watch().map((rows) => {
+          for (final r in rows) r.read(marks.photoId)!: r.read(count)!,
+        });
+  }
+
+  /// A photo's JPEG and thumbnail, or null if it is gone.
+  Future<WallPhotoImage?> photoImage(String photoId) =>
+      (select(wallPhotoBytes)..where((b) => b.photoId.equals(photoId)))
+          .getSingleOrNull();
+
+  /// Adds an imported photo at the end of the layout's photos. Returns its id.
+  Future<String> addPhoto(
+    String        layoutId,
+    ImportedPhoto photo, {
+    String?       label,
+    DateTime?     today,
+  }) =>
+      transaction(() async {
+        final maxOrder = wallPhotos.sortOrder.max();
+        final last     = await (selectOnly(wallPhotos)
+              ..addColumns([maxOrder])
+              ..where(wallPhotos.layoutId.equals(layoutId)))
+            .map((row) => row.read(maxOrder))
+            .getSingle();
+        final id = newId();
+        await into(wallPhotos).insert(WallPhotosCompanion.insert(
+          id:        Value(id),
+          layoutId:  layoutId,
+          sortOrder: (last ?? -1) + 1,
+          width:     photo.width,
+          height:    photo.height,
+          addedOn:   dateStrFrom(today ?? DateTime.now()),
+          label:     Value(label),
+        ));
+        await into(wallPhotoBytes).insert(WallPhotoBytesCompanion.insert(
+          photoId: id, data: photo.data, thumb: photo.thumb));
+        return id;
+      });
+
+  /// Sets a photo's label; blank clears it.
+  Future<void> setPhotoLabel(String id, String? label) {
+    final trimmed = label?.trim();
+    return (update(wallPhotos)..where((p) => p.id.equals(id))).write(
+        WallPhotosCompanion(
+            label: Value(trimmed == null || trimmed.isEmpty ? null : trimmed)));
+  }
+
+  /// Puts a layout's photos in the order of [ids], which lists all of them.
+  Future<void> reorderPhotos(List<String> ids) => batch((b) {
+        for (var i = 0; i < ids.length; i++) {
+          b.update(wallPhotos, WallPhotosCompanion(sortOrder: Value(i)),
+              where: (p) => p.id.equals(ids[i]));
+        }
+      });
+
+  /// Deletes a photo no mark sits on. Throws [PhotoInUse], naming the
+  /// problems, if any mark does (retired problems count too).
+  Future<DeletedPhoto> deletePhoto(String id) => transaction(() async {
+        final users = await (selectOnly(problems, distinct: true).join([
+          innerJoin(marks, marks.problemId.equalsExp(problems.id)),
+        ])
+              ..addColumns([problems.name])
+              ..where(marks.photoId.equals(id))
+              ..orderBy([OrderingTerm(expression: problems.name)]))
+            .map((r) => r.read(problems.name)!)
+            .get();
+        if (users.isNotEmpty) throw PhotoInUse(users);
+
+        final photo = await (select(wallPhotos)..where((p) => p.id.equals(id)))
+            .getSingle();
+        final image = (await photoImage(id))!;
+        await (delete(wallPhotoBytes)..where((b) => b.photoId.equals(id))).go();
+        await (delete(wallPhotos)..where((p) => p.id.equals(id))).go();
+        return DeletedPhoto(photo: photo, image: image);
+      });
+
+  /// Puts back what [deletePhoto] removed, in its old place.
+  Future<void> restorePhoto(DeletedPhoto d) => batch((b) {
+        b.insert(wallPhotos,     d.photo);
+        b.insert(wallPhotoBytes, d.image);
       });
 }

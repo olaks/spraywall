@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../database/database.dart';
+import '../../photos/add_photo.dart';
 import '../../providers/app_providers.dart';
 import '../../utils/undo_snackbar.dart';
 import '../not_found_screen.dart';
 import 'edit_wall_dialog.dart';
 
-/// A wall's current layout. For now only its frame: photos and the problem
-/// list arrive in later slices.
+/// A wall's current layout. For now only its frame: the problem list arrives
+/// with ticket 04.
 class WallScreen extends ConsumerWidget {
   final String wallId;
   const WallScreen({super.key, required this.wallId});
@@ -44,6 +45,8 @@ class WallScreen extends ConsumerWidget {
     final w = wall.value;
     final l = layout.value;
     if (w == null || l == null) return const NotFoundScreen();
+    final photos    = ref.watch(photosProvider(l.id)).value;
+    final hasPhotos = photos?.isNotEmpty ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -60,6 +63,10 @@ class WallScreen extends ConsumerWidget {
             tooltip: 'Wall menu',
             itemBuilder: (_) => [
               PopupMenuItem(
+                onTap: () => context.go('/walls/${w.id}/photos'),
+                child: const Text('Photos'),
+              ),
+              PopupMenuItem(
                 onTap: () => _editWall(context, ref, w),
                 child: const Text('Edit wall'),
               ),
@@ -67,10 +74,23 @@ class WallScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: const Center(
+      // Problems are set on photos, so the first thing a layout needs is one.
+      floatingActionButton: photos != null && !hasPhotos
+          ? FloatingActionButton.extended(
+              onPressed: () => addWallPhoto(context, ref, l.id),
+              icon:      const Icon(Icons.add_a_photo_outlined),
+              label:     const Text('Add a wall photo'),
+            )
+          : null,
+      body: Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text('No wall photos yet', textAlign: TextAlign.center),
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            photos == null ? '' :
+            hasPhotos      ? 'No problems yet'
+                           : 'No wall photos yet',
+            textAlign: TextAlign.center,
+          ),
         ),
       ),
     );

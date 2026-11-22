@@ -14,7 +14,7 @@ void main() {
   setUp(() => db = openTestDb());
   tearDown(() => db.close());
 
-  testWidgets('creating the first wall opens it', (tester) async {
+  testApp('creating the first wall opens it', (tester) async {
     await pumpApp(tester, db);
     expect(find.text('Create your first wall'), findsOneWidget);
 
@@ -37,10 +37,9 @@ void main() {
     expect(find.text('Home wall'), findsOneWidget);
     expect(find.text('V grades'), findsOneWidget);
 
-    await teardownTree(tester);
   });
 
-  testWidgets('a clashing name keeps the dialog open with a reason',
+  testApp('a clashing name keeps the dialog open with a reason',
       (tester) async {
     await seedWall(db, name: 'Home wall');
     await pumpApp(tester, db);
@@ -54,7 +53,6 @@ void main() {
 
     expect(find.text('A wall called "HOME WALL" already exists'),
         findsOneWidget);
-    await teardownTree(tester);
   });
 
   Future<void> openEditWall(WidgetTester tester, String name) async {
@@ -66,7 +64,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('deleting a wall lands on the list, and undo brings it back',
+  testApp('deleting a wall lands on the list, and undo brings it back',
       (tester) async {
     await seedWall(db, name: 'Home wall');
     await seedWall(db, name: 'Garage');
@@ -88,10 +86,9 @@ void main() {
     expect(walls!.map((w) => w.name), ['Home wall', 'Garage'],
         reason: 'back in its old place');
 
-    await teardownTree(tester);
   });
 
-  testWidgets('dragging a wall by its handle reorders the list',
+  testApp('dragging a wall by its handle reorders the list',
       (tester) async {
     for (final name in ['A', 'B', 'C']) {
       await seedWall(db, name: name);
@@ -111,10 +108,9 @@ void main() {
 
     final walls = await tester.runAsync(() => db.watchWalls().first);
     expect(walls!.map((w) => w.name), ['B', 'C', 'A']);
-    await teardownTree(tester);
   });
 
-  testWidgets('a renamed wall shows its new name', (tester) async {
+  testApp('a renamed wall shows its new name', (tester) async {
     await seedWall(db, name: 'Home wall');
     await pumpApp(tester, db);
 
@@ -125,10 +121,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Cellar'), findsOneWidget);
 
-    await teardownTree(tester);
   });
 
-  testWidgets('the grade scale is locked once a problem has a grade',
+  testApp('the grade scale is locked once a problem has a grade',
       (tester) async {
     final id     = await seedWall(db, name: 'Home wall');
     final layout = await tester.runAsync(() => db.watchCurrentLayout(id).first);
@@ -147,15 +142,13 @@ void main() {
 
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    await teardownTree(tester);
   });
 
-  testWidgets('an unknown wall id shows the not-found page', (tester) async {
+  testApp('an unknown wall id shows the not-found page', (tester) async {
     await pumpApp(tester, db);
     final context = tester.element(find.byType(Scaffold).first);
     context.go('/walls/${newId()}');
     await tester.pumpAndSettle();
     expect(find.text('Not found'), findsOneWidget);
-    await teardownTree(tester);
   });
 }
