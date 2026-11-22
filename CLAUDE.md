@@ -63,7 +63,9 @@ seed builders that go through the app's own database API, `jpegFixture()`
 (generated JPEGs with optional EXIF orientation and fake GPS),
 `StatementCounter`, and `pumpApp()` for widget tests, with a
 `FakePhotoSource` in place of the picker and the photo import run inline
-(an isolate never finishes under fake time).
+(an isolate never finishes under fake time). `pumpApp` opens a 400×800
+phone window (the test default, 800×600, would be a wide window); pass
+`size:` for a wide one.
 
 Widget tests run in fake time, where a drift stream (`watch…().first`) never
 completes: read streams inside `tester.runAsync` (one-shot queries and writes

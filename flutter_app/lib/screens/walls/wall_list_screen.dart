@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../database/database.dart';
 import '../../providers/app_providers.dart';
 import 'new_wall_dialog.dart';
+import '../../widgets/wide.dart';
 
 /// The root screen: every wall, in the user's order. Shown even with a single
 /// wall, so there is always one obvious place to add another.
@@ -57,10 +58,11 @@ class _WallList extends ConsumerWidget {
   const _WallList({required this.walls});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => ReorderableListView(
+  Widget build(BuildContext context, WidgetRef ref) => ReadableWidth(
+      builder: (context, sides) => ReorderableListView(
         buildDefaultDragHandles: false,
         // Room for the FAB under the last row.
-        padding: const EdgeInsets.only(bottom: 88),
+        padding: sides + const EdgeInsets.only(bottom: 88),
         onReorder: (from, to) {
           final ids = [for (final w in walls) w.id];
           final id  = ids.removeAt(from);
@@ -80,7 +82,7 @@ class _WallList extends ConsumerWidget {
               onTap:    () => context.go('/walls/${w.id}'),
             ),
         ],
-      );
+      ));
 }
 
 String gradeScaleLabel(GradeScale s) => switch (s) {

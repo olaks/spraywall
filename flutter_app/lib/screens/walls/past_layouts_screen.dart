@@ -5,6 +5,7 @@ import '../../database/database.dart';
 import '../../providers/app_providers.dart';
 import '../../utils/undo_snackbar.dart';
 import '../not_found_screen.dart';
+import '../../widgets/wide.dart';
 
 /// A wall's archived layouts, newest first: dates, name, and what each
 /// holds. Tap opens one read-only; the menu deletes one, with undo.
@@ -55,7 +56,9 @@ class PastLayoutsScreen extends ConsumerWidget {
                     'current one here.', textAlign: TextAlign.center),
               ),
             )
-          : ListView(children: [
+          : ReadableWidth(builder: (context, sides) => ListView(
+              padding: sides,
+              children: [
               for (final p in list)
                 ListTile(
                   onTap: () =>
@@ -78,7 +81,7 @@ class PastLayoutsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-            ]),
+            ])),
     );
   }
 }

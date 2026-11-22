@@ -12,6 +12,7 @@ import '../../widgets/marked_thumb.dart';
 import '../not_found_screen.dart';
 import 'edit_wall_dialog.dart';
 import 'reset_dialog.dart';
+import '../../widgets/wide.dart';
 
 /// A wall's current layout: its problems, filtered and sorted, each row with
 /// its grade, set date and the first photo it is marked on.
@@ -196,11 +197,15 @@ class _ProblemList extends StatelessWidget {
       (byProblem[m.problemId] ??= []).add(m);
     }
 
-    return Column(children: [
-      _FilterBar(
-        scale:   gradesFor(wall.gradeScale),
-        query:   query,
-        onQuery: onQuery,
+    // The filter bar lines up with the capped rows under it.
+    return ReadableWidth(builder: (context, sides) => Column(children: [
+      Padding(
+        padding: sides,
+        child: _FilterBar(
+          scale:   gradesFor(wall.gradeScale),
+          query:   query,
+          onQuery: onQuery,
+        ),
       ),
       Expanded(
         child: shown.isEmpty
@@ -222,7 +227,7 @@ class _ProblemList extends StatelessWidget {
                 ]),
               )
             : ListView(
-                padding: const EdgeInsets.only(bottom: 88),
+                padding: sides + const EdgeInsets.only(bottom: 88),
                 children: [
                   for (final p in shown)
                     _ProblemRow(
@@ -234,7 +239,7 @@ class _ProblemList extends StatelessWidget {
                 ],
               ),
       ),
-    ]);
+    ]));
   }
 }
 

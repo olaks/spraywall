@@ -10,6 +10,7 @@ import '../../providers/app_providers.dart';
 import '../../utils/format_utils.dart';
 import '../../utils/undo_snackbar.dart';
 import '../../widgets/photo_strip.dart';
+import '../../widgets/wide.dart';
 import '../../widgets/zoomable_photo.dart';
 import '../not_found_screen.dart';
 import 'problem_details_sheet.dart';
@@ -301,52 +302,61 @@ class _EditorState extends ConsumerState<_Editor> {
             ),
           ],
         ),
-        body: Column(children: [
-          Expanded(
-            child: Stack(children: [
-              ZoomablePhoto(
-                // A fresh viewer per photo, on that photo's own controller.
-                key:        ValueKey(photo.id),
-                photo:      photo,
+        // A phone stacks photo, strip and palette; a wide window puts the
+        // strip on the left and the palette on the right. Each photo's zoom
+        // lives in its controller, so it survives the switch.
+        body: LayoutBuilder(builder: (context, c) {
+          final wide      = isWide(c);
+          final photoArea = Stack(children: [
+            ZoomablePhoto(
+              // A fresh viewer per photo, on that photo's own controller.
+              key:        ValueKey(photo.id),
+              photo:      photo,
+              controller: view,
+              panEnabled: !_holding,
+              overlay: MarkLayer(
+                photo:      _photoSize,
                 controller: view,
-                panEnabled: !_holding,
-                overlay: MarkLayer(
-                  photo:      _photoSize,
-                  controller: view,
-                  marks:      _marks.marksOn(photo.id),
-                  selectedId: selected?.id,
-                  onTapEmpty: (p) {
-                    final (cx, cy) = normalise(p, _photoSize);
-                    _marks.place(photo.id, cx, cy);
-                  },
-                  onTapMark: _marks.select,
-                  onMove: (id, d) => _marks.move(
-                      id, d.dx / _photoSize.width, d.dy / _photoSize.height),
-                  // r is a fraction of width, like the handle's drag.
-                  onResize: (id, dx) => _marks.resize(id, dx / _photoSize.width),
-                  onHold: (h) => setState(() => _holding = h),
-                ),
+                marks:      _marks.marksOn(photo.id),
+                selectedId: selected?.id,
+                onTapEmpty: (p) {
+                  final (cx, cy) = normalise(p, _photoSize);
+                  _marks.place(photo.id, cx, cy);
+                },
+                onTapMark: _marks.select,
+                onMove: (id, d) => _marks.move(
+                    id, d.dx / _photoSize.width, d.dy / _photoSize.height),
+                // r is a fraction of width, like the handle's drag.
+                onResize: (id, dx) => _marks.resize(id, dx / _photoSize.width),
+                onHold: (h) => setState(() => _holding = h),
               ),
-              if (hint != null)
-                Positioned(
-                  top: 8, left: 0, right: 0,
-                  child: Center(child: _Hint(hint)),
-                ),
-            ]),
-          ),
-          PhotoStrip(
+            ),
+            if (hint != null)
+              Positioned(
+                top: 8, left: 0, right: 0,
+                child: Center(child: _Hint(hint)),
+              ),
+          ]);
+          final strip = PhotoStrip(
             photos:    widget.photos,
             currentId: photo.id,
             marks:     _marks.marks,
             onSelect:  _show,
-          ),
-          _Palette(
+            axis:      wide ? Axis.vertical : Axis.horizontal,
+          );
+          final palette = _Palette(
             role:     selected?.role ?? _marks.brush,
             onRole:   _marks.chooseRole,
             onTrash:  selected == null ? null : _trash,
             onDone:   selected == null ? null : () => _marks.select(null),
-          ),
-        ]),
+            sideBar:  wide,
+          );
+          return wide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [strip, Expanded(child: photoArea), palette])
+              : Column(children: [Expanded(child: photoArea), strip, palette]);
+        }),
       ),
     );
   }
@@ -368,19 +378,24 @@ class _Hint extends StatelessWidget {
 }
 
 /// The four role chips (the brush, or the selected mark's role), trash and
-/// done.
+/// done: a bar under the photo, or a side bar on its right.
 class _Palette extends StatelessWidget {
   final Role               role;
   final ValueChanged<Role> onRole;
   final VoidCallback?      onTrash;
   final VoidCallback?      onDone;
+  final bool               sideBar;
 
   const _Palette({
     required this.role,
     required this.onRole,
     required this.onTrash,
     required this.onDone,
+    required this.sideBar,
   });
+
+  /// The side bar's width: room for the widest chip, "Finish".
+  static const width = 160.0;
 
   static String _label(Role r) => switch (r) {
         Role.start  => 'Start',
@@ -390,44 +405,73 @@ class _Palette extends StatelessWidget {
       };
 
   @override
-  Widget build(BuildContext context) => Material(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              alignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                for (final r in Role.values)
-                  ChoiceChip(
-                    avatar: Container(
-                      width: 14, height: 14,
-                      decoration: BoxDecoration(
-                        shape:  BoxShape.circle,
-                        border: Border.all(color: roleColors[r]!, width: 3),
-                      ),
-                    ),
-                    label:      Text(_label(r)),
-                    selected:   role == r,
-                    onSelected: (_) => onRole(r),
-                  ),
-                IconButton(
-                  tooltip:   'Delete mark',
-                  icon:      const Icon(Icons.delete_outline),
-                  onPressed: onTrash,
-                ),
-                IconButton(
-                  tooltip:   'Done',
-                  icon:      const Icon(Icons.check),
-                  onPressed: onDone,
-                ),
-              ],
+  Widget build(BuildContext context) {
+    final chips = [
+      for (final r in Role.values)
+        ChoiceChip(
+          key: ValueKey('role-${r.name}'),
+          avatar: Container(
+            width: 14, height: 14,
+            decoration: BoxDecoration(
+              shape:  BoxShape.circle,
+              border: Border.all(color: roleColors[r]!, width: 3),
             ),
           ),
+          label:      Text(_label(r)),
+          selected:   role == r,
+          onSelected: (_) => onRole(r),
         ),
-      );
+    ];
+    final actions = [
+      IconButton(
+        tooltip:   'Delete mark',
+        icon:      const Icon(Icons.delete_outline),
+        onPressed: onTrash,
+      ),
+      IconButton(
+        tooltip:   'Done',
+        icon:      const Icon(Icons.check),
+        onPressed: onDone,
+      ),
+    ];
+
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      child: sideBar
+          // A landscape phone is short: the side bar scrolls if it must.
+          ? SafeArea(
+              left: false,
+              child: SizedBox(
+                width: width,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final c in chips)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: c,
+                        ),
+                      Row(children: actions),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [...chips, ...actions],
+                ),
+              ),
+            ),
+    );
+  }
 }

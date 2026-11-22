@@ -8,6 +8,7 @@ import '../../marks/opening_photo.dart';
 import '../../providers/app_providers.dart';
 import '../../utils/undo_snackbar.dart';
 import '../../widgets/photo_strip.dart';
+import '../../widgets/wide.dart';
 import '../../widgets/zoomable_photo.dart';
 import '../not_found_screen.dart';
 
@@ -153,36 +154,90 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
           ),
         ],
       ),
-      body: Column(children: [
-        Expanded(
-          child: photo == null
-              ? const Center(child: Text('This layout has no photos'))
-              : ZoomablePhoto(
-                  key:        ValueKey(photo.id),
-                  photo:      photo,
-                  controller: _views.putIfAbsent(photo.id, PhotoViewController.new),
-                  // No callbacks: it draws, and takes no taps or drags of
-                  // its own.
-                  overlay: MarkLayer(
-                    photo: Size(photo.width.toDouble(), photo.height.toDouble()),
-                    controller: _views[photo.id]!,
-                    marks: [
-                      for (final m in ms)
-                        if (m.photoId == photo.id) EditMark.fromMark(m),
-                    ],
-                  ),
+      // A phone stacks photo, strip and description sheet; a wide window
+      // puts the strip on the left and the details in a panel on the right.
+      body: LayoutBuilder(builder: (context, c) {
+        final wide      = isWide(c);
+        final photoArea = photo == null
+            ? const Center(child: Text('This layout has no photos'))
+            : ZoomablePhoto(
+                key:        ValueKey(photo.id),
+                photo:      photo,
+                controller: _views.putIfAbsent(photo.id, PhotoViewController.new),
+                // No callbacks: it draws, and takes no taps or drags of its
+                // own.
+                overlay: MarkLayer(
+                  photo: Size(photo.width.toDouble(), photo.height.toDouble()),
+                  controller: _views[photo.id]!,
+                  marks: [
+                    for (final m in ms)
+                      if (m.photoId == photo.id) EditMark.fromMark(m),
+                  ],
                 ),
-        ),
-        if (photo != null)
-          PhotoStrip(
-            photos:      widget.photos,
-            currentId:   photo.id,
-            marks:       [for (final m in ms) EditMark.fromMark(m)],
-            dimUnmarked: true,
-            onSelect:    (id) => setState(() => _picked = id),
+              );
+        final strip = photo == null
+            ? const SizedBox.shrink()
+            : PhotoStrip(
+                photos:      widget.photos,
+                currentId:   photo.id,
+                marks:       [for (final m in ms) EditMark.fromMark(m)],
+                dimUnmarked: true,
+                onSelect:    (id) => setState(() => _picked = id),
+                axis:        wide ? Axis.vertical : Axis.horizontal,
+              );
+        return wide
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  strip,
+                  Expanded(child: photoArea),
+                  _DetailsPanel(problem: p),
+                ])
+            : Column(children: [
+                Expanded(child: photoArea),
+                strip,
+                if (p.description.isNotEmpty) _DescriptionSheet(problem: p),
+              ]);
+      }),
+    );
+  }
+}
+
+/// A wide window's right-hand panel: the dates and the description, always
+/// open, since the photo has room beside it. Name and grade stay in the app
+/// bar, as on a phone.
+class _DetailsPanel extends StatelessWidget {
+  final Problem problem;
+  const _DetailsPanel({required this.problem});
+
+  static const width = 300.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final p     = problem;
+    return Material(
+      key:   const ValueKey('details-panel'),
+      color: theme.colorScheme.surfaceContainer,
+      child: SafeArea(
+        left: false,
+        child: SizedBox(
+          width: width,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text('Set ${p.setOn}', style: theme.textTheme.labelLarge),
+              if (p.retiredOn != null)
+                Text('Retired ${p.retiredOn}', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 12),
+              p.description.isEmpty
+                  ? Text('No description',
+                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
+                  : Text(p.description),
+            ],
           ),
-        if (p.description.isNotEmpty) _DescriptionSheet(problem: p),
-      ]),
+        ),
+      ),
     );
   }
 }

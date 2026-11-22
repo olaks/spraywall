@@ -13,6 +13,9 @@ class PhotoStrip extends StatelessWidget {
   /// Under the photo on a phone.
   static const height = 96.0;
 
+  /// The left column on a wide window.
+  static const width = 112.0;
+
   final List<WallPhoto>      photos;
   final String               currentId;
   final List<EditMark>       marks;
@@ -22,6 +25,9 @@ class PhotoStrip extends StatelessWidget {
   /// still selectable.
   final bool dimUnmarked;
 
+  /// A row under the photo, or a column beside it on a wide window.
+  final Axis axis;
+
   const PhotoStrip({
     super.key,
     required this.photos,
@@ -29,18 +35,23 @@ class PhotoStrip extends StatelessWidget {
     required this.marks,
     required this.onSelect,
     this.dimUnmarked = false,
+    this.axis        = Axis.horizontal,
   });
 
   @override
   Widget build(BuildContext context) {
     if (photos.length < 2) return const SizedBox.shrink();
+    final across = axis == Axis.horizontal;
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: SizedBox(
-        height: height,
+        height: across ? height : null,
+        width:  across ? null   : width,
         child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          scrollDirection: axis,
+          padding: across
+              ? const EdgeInsets.symmetric(horizontal: 4)
+              : const EdgeInsets.symmetric(vertical: 4),
           children: [
             for (final (i, p) in photos.indexed)
               _Thumb(

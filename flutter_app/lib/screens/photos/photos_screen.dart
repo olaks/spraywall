@@ -6,6 +6,7 @@ import '../../photos/add_photo.dart';
 import '../../providers/app_providers.dart';
 import '../../utils/undo_snackbar.dart';
 import '../not_found_screen.dart';
+import '../../widgets/wide.dart';
 
 /// The current layout's wall photos: add, label, reorder, delete, and open
 /// one full-screen. A list rather than a grid: Flutter has no reorderable
@@ -47,9 +48,9 @@ class PhotosScreen extends ConsumerWidget {
                   ),
                 ),
               )
-            : ReorderableListView(
+            : ReadableWidth(builder: (context, sides) => ReorderableListView(
                 buildDefaultDragHandles: false,
-                padding: const EdgeInsets.only(bottom: 88),
+                padding: sides + const EdgeInsets.only(bottom: 88),
                 onReorder: (from, to) {
                   final ids = [for (final p in list) p.id];
                   final id  = ids.removeAt(from);
@@ -66,7 +67,7 @@ class PhotosScreen extends ConsumerWidget {
                       users:  usage[p.id] ?? 0,
                     ),
                 ],
-              ),
+              )),
       ),
     );
   }

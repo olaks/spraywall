@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/wide.dart';
 
 /// Things that apply to the whole app. Backup export, import and the backup
 /// reminder join the theme here in later slices.
@@ -16,8 +17,8 @@ class SettingsScreen extends ConsumerWidget {
         title: const Text('Settings',
             style: TextStyle(fontWeight: FontWeight.bold)),
       ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 32),
+      body: ReadableWidth(builder: (context, sides) => ListView(
+        padding: sides + const EdgeInsets.only(bottom: 32),
         children: [
           const _SectionLabel('APPEARANCE'),
           Padding(
@@ -29,7 +30,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 }

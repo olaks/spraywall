@@ -43,13 +43,22 @@ class FakePhotoSource implements PhotoSource {
   }
 }
 
-/// Pumps the whole app, starting at '/', over [db] and empty preferences.
+/// A phone held upright: the narrow layout. Wide-window tests pass their
+/// own [pumpApp] size.
+const phone = Size(400, 800);
+
+/// Pumps the whole app, starting at '/', over [db] and empty preferences, in
+/// a window of [size] logical pixels (a phone unless given).
 /// Photo import runs inline: an isolate never finishes under fake time.
 Future<void> pumpApp(
   WidgetTester tester,
   AppDatabase  db, {
   PhotoSource? photos,
+  Size         size = phone,
 }) async {
+  tester.view.physicalSize     = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
   await tester.pumpWidget(ProviderScope(
