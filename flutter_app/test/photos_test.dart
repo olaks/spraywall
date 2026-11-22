@@ -30,6 +30,12 @@ void main() {
     expect(image.thumb, isNotEmpty);
   });
 
+  test('the thumbnail reads alone, and is the stored one', () async {
+    final id = await seedPhoto(db, layout);
+    expect(await db.photoThumb(id), (await db.photoImage(id))!.thumb);
+    expect(await db.photoThumb('gone'), isNull);
+  });
+
   test('labels are trimmed, and blank clears them', () async {
     final id = await seedPhoto(db, layout);
     await db.setPhotoLabel(id, '  Left half ');

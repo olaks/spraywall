@@ -31,6 +31,18 @@ void main() {
         marks: marks ?? [mark(Role.start)],
       );
 
+  test("a layout's marks: all its problems', in drawing order, and no "
+      "other layout's", () async {
+    final a = await create('A', marks: [mark(Role.start), mark(Role.foot)]);
+    final b = await create('B', marks: [mark(Role.hand)]);
+    final other  = await currentLayoutId(db, await seedWall(db, name: 'Other'));
+    await seedProblem(db, other, marks: [(await seedPhoto(db, other), Role.hand)]);
+
+    final ms = await db.watchLayoutMarks(layout).first;
+    expect(ms.map((m) => (m.problemId, m.role)),
+        [(a, Role.start), (a, Role.foot), (b, Role.hand)]);
+  });
+
   test('stores the details and the marks in the order placed', () async {
     final roles = [Role.start, Role.hand, Role.foot, Role.hand, Role.finish];
     final id = await create(' Arête ', grade: '6B', marks: [

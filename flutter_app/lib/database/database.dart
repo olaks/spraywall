@@ -330,6 +330,14 @@ class AppDatabase extends _$AppDatabase {
         });
   }
 
+  /// A photo's thumbnail alone, for lists: never loads the full JPEG.
+  Future<Uint8List?> photoThumb(String photoId) async {
+    final query = selectOnly(wallPhotoBytes)
+      ..addColumns([wallPhotoBytes.thumb])
+      ..where(wallPhotoBytes.photoId.equals(photoId));
+    return (await query.getSingleOrNull())?.read(wallPhotoBytes.thumb);
+  }
+
   /// A photo's JPEG and thumbnail, or null if it is gone.
   Future<WallPhotoImage?> photoImage(String photoId) =>
       (select(wallPhotoBytes)..where((b) => b.photoId.equals(photoId)))
@@ -419,6 +427,15 @@ class AppDatabase extends _$AppDatabase {
   /// One problem, or null once it is gone.
   Stream<Problem?> watchProblem(String id) =>
       (select(problems)..where((p) => p.id.equals(id))).watchSingleOrNull();
+
+  /// Every mark of a layout's problems, in drawing order, for the list's
+  /// thumbnails: one query for the whole list rather than one per row.
+  Stream<List<Mark>> watchLayoutMarks(String layoutId) => (select(marks)
+        ..where((m) => m.problemId.isInQuery(selectOnly(problems)
+          ..addColumns([problems.id])
+          ..where(problems.layoutId.equals(layoutId))))
+        ..orderBy([(_) => OrderingTerm(expression: _rowid)]))
+      .watch();
 
   /// A problem's marks in the order they were placed, which is the order
   /// they draw in.

@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart' show Uint8List;
 import '../database/database.dart';
+import '../problems/browse.dart';
 
 // ── Database singleton ─────────────────────────────────────────────────────
 
@@ -35,6 +37,29 @@ final photoUsageProvider = StreamProvider.family<Map<String, int>, String>(
 final photoImageProvider =
     FutureProvider.autoDispose.family<WallPhotoImage?, String>(
         (ref, id) => ref.watch(dbProvider).photoImage(id));
+
+/// A photo's thumbnail, for lists and the photo strip.
+final photoThumbProvider = FutureProvider.autoDispose.family<Uint8List?, String>(
+    (ref, id) => ref.watch(dbProvider).photoThumb(id));
+
+/// Every mark of a layout's problems, for the list's thumbnails.
+final layoutMarksProvider = StreamProvider.family<List<Mark>, String>(
+    (ref, layoutId) => ref.watch(dbProvider).watchLayoutMarks(layoutId));
+
+/// The wall screen's filters and sort, per wall. In memory for the app run:
+/// they survive opening a problem and coming back, but not a restart.
+final problemQueryProvider =
+    NotifierProvider.family<ProblemQueryNotifier, ProblemQuery, String>(
+        ProblemQueryNotifier.new);
+
+class ProblemQueryNotifier extends Notifier<ProblemQuery> {
+  ProblemQueryNotifier(String _);
+
+  @override
+  ProblemQuery build() => const ProblemQuery();
+
+  void set(ProblemQuery query) => state = query;
+}
 
 /// A layout's problems, retired ones included, by name.
 final problemsProvider = StreamProvider.family<List<Problem>, String>(

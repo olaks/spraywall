@@ -45,6 +45,7 @@ Future<String> seedProblem(
   String               layoutId, {
   String               name  = 'Arête',
   String?              grade,
+  DateTime?            setOn,
   List<(String, Role)>? marks,
 }) async {
   final pairs = marks ?? [
@@ -55,7 +56,7 @@ Future<String> seedProblem(
     layoutId: layoutId,
     name:     name,
     grade:    grade,
-    setOn:    DateTime(2026, 11, 22),
+    setOn:    setOn ?? DateTime(2026, 11, 22),
     marks: [
       for (final (i, (photoId, role)) in pairs.indexed)
         (id: newId(), photoId: photoId, role: role,

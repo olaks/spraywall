@@ -77,7 +77,8 @@ drag moves in steps (`moveTo` plus `pump` in a loop) to a point measured from
 the target row; one long jump lands short. Let a snackbar slide in
 (`pumpAndSettle`) before tapping its action. Seeding that reads a stream
 (`seedProblem` without explicit marks) goes inside `runAsync` in a widget
-test.
+test. A write from the test body after `pumpApp` doesn't reach the app's
+streams under fake time: seed what the screen should show before pumping.
 
 ## Architecture
 

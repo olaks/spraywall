@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database.dart';
 import '../marks/mark_editor.dart';
 import '../marks/mark_geometry.dart';
-import '../providers/app_providers.dart';
 import '../screens/photos/photos_screen.dart' show photoTitle;
+import 'marked_thumb.dart';
 
 /// The layout's photos as thumbnails, to switch the one a problem screen
 /// shows. Each carries its label, this problem's marks and a count per role;
@@ -60,7 +59,7 @@ class PhotoStrip extends StatelessWidget {
   }
 }
 
-class _Thumb extends ConsumerWidget {
+class _Thumb extends StatelessWidget {
   final WallPhoto      photo;
   final String         title;
   final List<EditMark> marks;
@@ -83,9 +82,8 @@ class _Thumb extends ConsumerWidget {
   static const _imageBox = Size(96, 48);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final thumb = ref.watch(photoImageProvider(photo.id)).value?.thumb;
     final counts = {
       for (final r in Role.values)
         if (marks.where((m) => m.role == r).length case final n when n > 0)
@@ -116,19 +114,8 @@ class _Thumb extends ConsumerWidget {
               ),
               child: Column(children: [
                 SizedBox.fromSize(
-                  size: _imageBox,
-                  child: Center(
-                    // Exactly the photo's shape, so the marks land on it.
-                    child: AspectRatio(
-                      aspectRatio: photo.width / photo.height,
-                      child: Stack(fit: StackFit.expand, children: [
-                        thumb == null
-                            ? ColoredBox(color: theme.colorScheme.surfaceContainerHighest)
-                            : Image.memory(thumb, fit: BoxFit.fill, gaplessPlayback: true),
-                        CustomPaint(painter: _ThumbMarks(marks)),
-                      ]),
-                    ),
-                  ),
+                  size:  _imageBox,
+                  child: MarkedThumb(photo: photo, marks: marks),
                 ),
                 const SizedBox(height: 2),
                 SizedBox(
@@ -171,28 +158,4 @@ class _Thumb extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// A thumbnail's marks: the same circles as on the photo, scaled to the
-/// thumbnail, with a floor so a foot chip still shows.
-class _ThumbMarks extends CustomPainter {
-  final List<EditMark> marks;
-  _ThumbMarks(this.marks);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final m in marks) {
-      canvas.drawCircle(
-        centrePx(m.cx, m.cy, size),
-        radiusPx(m.r, size).clamp(1.5, double.infinity),
-        Paint()
-          ..style       = PaintingStyle.stroke
-          ..strokeWidth = 1.2
-          ..color       = roleColors[m.role]!,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ThumbMarks old) => old.marks != marks;
 }
