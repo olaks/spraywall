@@ -1,16 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backup/backup_export.dart';
+import '../../backup/backup_import.dart';
+import '../../database/database.dart';
+import '../../photos/photo_import.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/backup_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/pick_binary_file.dart';
 import '../../utils/share_file.dart';
 import '../../widgets/wide.dart';
 
 /// Things that apply to the whole app. Everything lives on this device, so
-/// getting it out leads: the backup status and the full export. Import joins
-/// them in a later slice.
+/// backups lead: the status, the full export, and import.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -40,6 +44,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  /// Picks a backup, checks all of it, makes the new photos' thumbnails
+  /// with progress, merges it in one transaction, and says what happened.
+  /// A backup that fails a check writes nothing. There is no undo.
+  Future<void> _import() async {
+    final bytes = await ref.read(pickBinaryFileProvider)(extension: 'zip');
+    if (bytes == null || !mounted) return;
+    final db        = ref.read(dbProvider);
+    final parse     = ref.read(backupParserProvider);
+    final thumb     = ref.read(thumbMakerProvider);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final progress  = ValueNotifier<_Progress>((step: 'Reading the backup', done: null));
+    setState(() => _busy = true);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ProgressDialog(progress),
+    );
+
+    Object? failure;
+    ImportSummary? summary;
+    try {
+      final rows   = await parse(bytes);
+      final fresh  = await db.newPhotoIds([for (final p in rows.photos) p.id]);
+      final thumbs = <String, Uint8List>{};
+      for (final id in fresh) {
+        progress.value = (
+          step: 'Making thumbnails (${thumbs.length + 1} of ${fresh.length})',
+          done: thumbs.length / fresh.length,
+        );
+        thumbs[id] = await thumb(rows.photoData[id]!);
+      }
+      progress.value = (step: 'Importing', done: null);
+      summary = await db.importBackup(rows, thumbs);
+    } on UnreadablePhoto {
+      failure = "This backup is damaged: one of its photos can't be read.";
+    } catch (e) {
+      failure = e;
+    } finally {
+      navigator.pop();
+      progress.dispose();
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key:   const ValueKey('import-result'),
+        title: Text(summary == null ? 'Import failed' : 'Backup imported'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (summary == null)
+              Text('$failure\n\nNothing was changed.')
+            else
+              for (final line in importSummaryLines(summary))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(line),
+                ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeIdx = ref.watch(themeIndexProvider);
@@ -63,6 +139,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             enabled:  hasData && !_busy,
             onTap:    _exportAll,
           ),
+          ListTile(
+            leading:  const Icon(Icons.upload),
+            title:    const Text('Import backup'),
+            subtitle: const Text('Merge a backup into what is here'),
+            enabled:  !_busy,
+            onTap:    _import,
+          ),
           if (_busy)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
@@ -83,6 +166,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       )),
     );
   }
+}
+
+typedef _Progress = ({String step, double? done});
+
+/// What the import is doing; it can't be dismissed, and closes itself.
+class _ProgressDialog extends StatelessWidget {
+  final ValueListenable<_Progress> progress;
+  const _ProgressDialog(this.progress);
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Importing backup'),
+          content: ValueListenableBuilder<_Progress>(
+            valueListenable: progress,
+            builder: (context, p, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(p.step),
+                const SizedBox(height: 12),
+                LinearProgressIndicator(value: p.done),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 /// How long ago the last full export was: calm while it is recent, a

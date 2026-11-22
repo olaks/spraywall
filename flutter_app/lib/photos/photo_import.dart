@@ -56,6 +56,16 @@ ImportedPhoto importPhoto(Uint8List bytes) {
   );
 }
 
+/// The list thumbnail for a stored photo, made again from its bytes (a
+/// backup doesn't carry thumbnails). Pure, like [importPhoto], for an
+/// isolate.
+Uint8List makeThumb(Uint8List data) {
+  final decoded = img.decodeImage(data);
+  if (decoded == null) throw const UnreadablePhoto();
+  final thumb = _fitLongEdge(decoded, kThumbLongEdge)..exif = img.ExifData();
+  return img.encodeJpg(thumb, quality: 80);
+}
+
 /// [image] shrunk so its long edge is at most [longEdge]; never enlarged.
 img.Image _fitLongEdge(img.Image image, int longEdge) {
   final long = math.max(image.width, image.height);

@@ -86,6 +86,53 @@ class BackupRows {
   });
 }
 
+/// How many walls, layouts, photos and problems, for an import's summary.
+class BackupCounts {
+  final int walls, layouts, photos, problems;
+  const BackupCounts({
+    this.walls    = 0,
+    this.layouts  = 0,
+    this.photos   = 0,
+    this.problems = 0,
+  });
+}
+
+/// What [AppDatabase.importBackup] did, for the summary dialog.
+class ImportSummary {
+  final BackupCounts added;
+
+  /// Rows whose id was already on the device, left as they are (the device
+  /// wins). An existing problem's marks are skipped with it.
+  final BackupCounts alreadyHere;
+
+  /// New walls and problems whose name was taken: (from, to).
+  final List<(String, String)> renamed;
+
+  /// Problems whose grade wasn't on their wall's scale, imported ungraded.
+  final int ungraded;
+
+  /// Layouts no longer current because another was on the same wall.
+  final int archived;
+
+  const ImportSummary({
+    required this.added,
+    required this.alreadyHere,
+    required this.renamed,
+    required this.ungraded,
+    required this.archived,
+  });
+}
+
+/// Thrown, rolling the import back, when a backup's row has an id that is
+/// already on this device under a different parent: not the same row.
+class BackupClash implements Exception {
+  final String what;
+  const BackupClash(this.what);
+
+  @override
+  String toString() => "This backup can't be merged: $what";
+}
+
 /// What a reset did, for [AppDatabase.undoReset].
 typedef LayoutReset = ({String archivedId, String newId});
 
@@ -814,6 +861,244 @@ class AppDatabase extends _$AppDatabase {
           photoData: Map.fromEntries(data),
         );
       });
+
+  /// Which of [photoIds] aren't on this device yet: the photos an import
+  /// needs thumbnails for.
+  Future<Set<String>> newPhotoIds(Iterable<String> photoIds) async {
+    final ids  = photoIds.toSet();
+    final here = await (selectOnly(wallPhotos)
+          ..addColumns([wallPhotos.id])
+          ..where(wallPhotos.id.isIn(ids)))
+        .map((r) => r.read(wallPhotos.id)!)
+        .get();
+    return ids.difference(here.toSet());
+  }
+
+  /// Merges a checked backup in, all or nothing, and says what it did.
+  ///
+  /// Rows match by id and the device wins: an id already here is left as it
+  /// is, and an existing problem's marks are skipped with it. A new wall, or
+  /// a new problem in its layout, whose name is taken becomes `Name (2)`;
+  /// new walls go after the device's in the list. A grade off the wall's
+  /// scale is dropped. A wall left with two current layouts keeps the later
+  /// one current and ends the other on that date (a tie keeps the device's):
+  /// the only change made to a row already here. [thumbs] holds a thumbnail
+  /// for each new photo.
+  ///
+  /// Every lookup is made before the loop and the writes go in one batch, so
+  /// the statement count doesn't grow with the backup. Throws [BackupClash]
+  /// for an id that is here under a different parent.
+  Future<ImportSummary> importBackup(
+      BackupRows b, Map<String, Uint8List> thumbs) => transaction(() async {
+        // ── Lookups ──
+        final wallIds    = {for (final w in b.walls) w.id};
+        final layoutIds  = {for (final l in b.layouts) l.id};
+        final allWalls   = await select(walls).get();
+        final hereWalls  = {for (final w in allWalls) w.id: w};
+        final hereLayouts = {
+          for (final l in await (select(layouts)
+                ..where((l) => l.id.isIn(layoutIds)))
+              .get())
+            l.id: l,
+        };
+        final currents = {
+          for (final l in await (select(layouts)
+                ..where((l) => l.wallId.isIn(wallIds) & l.endedOn.isNull()))
+              .get())
+            l.wallId: l,
+        };
+        final herePhotos = {
+          for (final p in await (select(wallPhotos)
+                ..where((p) => p.id.isIn([for (final p in b.photos) p.id])))
+              .get())
+            p.id: p,
+        };
+        final hereProblems = {
+          for (final p in await (select(problems)
+                ..where((p) => p.id.isIn([for (final p in b.problems) p.id])))
+              .get())
+            p.id: p,
+        };
+        final hereMarks = (await (selectOnly(marks)
+                  ..addColumns([marks.id])
+                  ..where(marks.id.isIn([for (final m in b.marks) m.id])))
+                .map((r) => r.read(marks.id)!)
+                .get())
+            .toSet();
+        // What the layouts already here hold: photo order and problem names.
+        final photoOrders = <String, List<int>>{};
+        for (final r in await (selectOnly(wallPhotos)
+              ..addColumns([wallPhotos.layoutId, wallPhotos.sortOrder])
+              ..where(wallPhotos.layoutId.isIn(hereLayouts.keys)))
+            .get()) {
+          final String layoutId = r.read(wallPhotos.layoutId)!;
+          (photoOrders[layoutId] ??= []).add(r.read(wallPhotos.sortOrder)!);
+        }
+        final namesIn = <String, List<String>>{};
+        for (final r in await (selectOnly(problems)
+              ..addColumns([problems.layoutId, problems.name])
+              ..where(problems.layoutId.isIn(hereLayouts.keys)))
+            .get()) {
+          final String layoutId = r.read(problems.layoutId)!;
+          (namesIn[layoutId] ??= []).add(r.read(problems.name)!);
+        }
+
+        // ── Merge ──
+        final renamed  = <(String, String)>[];
+        var   ungraded = 0, archived = 0;
+        final scaleOf  = <String, GradeScale>{};   // wall id → its scale
+        final wallOf   = {for (final l in b.layouts) l.id: l.wallId};
+
+        // New walls keep their order among themselves, after the device's.
+        final newWalls = [
+          for (final w in b.walls) if (!hereWalls.containsKey(w.id)) w,
+        ];
+        final wallShift = _appendShift(
+            [for (final w in allWalls) w.sortOrder],
+            [for (final w in newWalls) w.sortOrder]);
+        final takenWalls = [for (final w in allWalls) w.name];
+        final addWalls   = <Wall>[];
+        for (final w in b.walls) {
+          final here = hereWalls[w.id];
+          if (here != null) {
+            scaleOf[w.id] = here.gradeScale;
+            continue;
+          }
+          final name = freeName(w.name, takenWalls);
+          if (name != w.name) renamed.add((w.name, name));
+          takenWalls.add(name);
+          scaleOf[w.id] = w.gradeScale;
+          addWalls.add(w.copyWith(name: name, sortOrder: w.sortOrder + wallShift));
+        }
+
+        final endHere    = <(String, String)>[];   // (layout id, ended on)
+        final addLayouts = <Layout>[];
+        for (var l in b.layouts) {
+          final here = hereLayouts[l.id];
+          if (here != null) {
+            if (here.wallId != l.wallId) {
+              throw BackupClash('a layout is on a different wall here');
+            }
+            continue;
+          }
+          final current = currents[l.wallId];
+          if (l.endedOn == null && current != null) {
+            archived++;
+            if (l.startedOn.compareTo(current.startedOn) > 0) {
+              endHere.add((current.id, l.startedOn));
+              currents[l.wallId] = l;
+            } else {
+              l = l.copyWith(endedOn: Value(current.startedOn));
+            }
+          } else if (l.endedOn == null) {
+            currents[l.wallId] = l;
+          }
+          addLayouts.add(l);
+        }
+
+        // Photos added to a layout already here go after its own.
+        final newPhotosIn = <String, List<int>>{};
+        for (final p in b.photos) {
+          if (!herePhotos.containsKey(p.id)) {
+            (newPhotosIn[p.layoutId] ??= []).add(p.sortOrder);
+          }
+        }
+        final photoShift = {
+          for (final MapEntry(key: id, value: orders) in newPhotosIn.entries)
+            id: _appendShift(photoOrders[id] ?? const [], orders),
+        };
+        final addPhotos = <WallPhoto>[];
+        final addBytes  = <WallPhotoImage>[];
+        for (final p in b.photos) {
+          final here = herePhotos[p.id];
+          if (here != null) {
+            if (here.layoutId != p.layoutId) {
+              throw BackupClash('a photo is in a different layout here');
+            }
+            continue;
+          }
+          addPhotos.add(p.copyWith(sortOrder: p.sortOrder + photoShift[p.layoutId]!));
+          addBytes.add(WallPhotoImage(
+            photoId: p.id,
+            data:    b.photoData[p.id]!,
+            thumb:   thumbs[p.id] ??
+                (throw StateError('No thumbnail for the new photo ${p.id}')),
+          ));
+        }
+
+        final skipped     = <String>{};   // problems here: their marks too
+        final addProblems = <Problem>[];
+        for (var p in b.problems) {
+          final here = hereProblems[p.id];
+          if (here != null) {
+            if (here.layoutId != p.layoutId) {
+              throw BackupClash('a problem is in a different layout here');
+            }
+            skipped.add(p.id);
+            continue;
+          }
+          final taken = namesIn[p.layoutId] ??= [];
+          final name  = freeName(p.name, taken);
+          if (name != p.name) renamed.add((p.name, name));
+          taken.add(name);
+          final scale = gradesFor(scaleOf[wallOf[p.layoutId]]!);
+          final off   = p.grade != null && !scale.contains(p.grade);
+          if (off) ungraded++;
+          addProblems.add(p.copyWith(
+              name: name, grade: off ? const Value(null) : Value(p.grade)));
+        }
+
+        final addMarks = <Mark>[];
+        for (final m in b.marks) {
+          if (skipped.contains(m.problemId)) continue;
+          if (hereMarks.contains(m.id)) {
+            throw BackupClash('a mark is on a different problem here');
+          }
+          addMarks.add(m);
+        }
+
+        // ── Write: one batch, layouts ended before the new current ones go
+        // in (one current layout per wall at every statement), parents
+        // first, marks in drawing order. ──
+        await batch((bt) {
+          for (final (id, on) in endHere) {
+            bt.update(layouts, LayoutsCompanion(endedOn: Value(on)),
+                where: (l) => l.id.equals(id));
+          }
+          bt.insertAll(walls,          addWalls);
+          bt.insertAll(layouts,        addLayouts);
+          bt.insertAll(wallPhotos,     addPhotos);
+          bt.insertAll(wallPhotoBytes, addBytes);
+          bt.insertAll(problems,       addProblems);
+          bt.insertAll(marks,          addMarks);
+        });
+
+        return ImportSummary(
+          added: BackupCounts(
+            walls: addWalls.length, layouts: addLayouts.length,
+            photos: addPhotos.length, problems: addProblems.length,
+          ),
+          alreadyHere: BackupCounts(
+            walls:    b.walls.length    - addWalls.length,
+            layouts:  b.layouts.length  - addLayouts.length,
+            photos:   b.photos.length   - addPhotos.length,
+            problems: b.problems.length - addProblems.length,
+          ),
+          renamed:  renamed,
+          ungraded: ungraded,
+          archived: archived,
+        );
+      });
+
+  /// How far to move [incoming] sort orders so they follow [here]'s, keeping
+  /// their own order and gaps. Nothing here: they stay as they are, so a
+  /// backup restored into an empty app comes back identical.
+  static int _appendShift(List<int> here, List<int> incoming) {
+    if (here.isEmpty || incoming.isEmpty) return 0;
+    final top = here.reduce((a, b) => a > b ? a : b);
+    final low = incoming.reduce((a, b) => a < b ? a : b);
+    return top + 1 - low;
+  }
 
   /// Throws [ArgumentError] unless [grade] is null or on the scale of the
   /// layout's wall.

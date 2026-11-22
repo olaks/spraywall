@@ -53,6 +53,8 @@ Manual checklist (spec: Testing Decisions):
   [ ] Marks look right on the sample wall photo
   [ ] Export everything: the share sheet on Android, a save dialog on Linux,
       a download on the web; the .zip opens and holds backup.json + photos/
+  [ ] Import that .zip on another platform: the summary adds everything,
+      photos and thumbnails show; importing it again adds nothing
 CHECKLIST
 
 echo "Building release APK..."

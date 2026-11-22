@@ -68,7 +68,9 @@ phone window (the test default, 800×600, would be a wide window); pass
 `size:` for a wide one. It also puts a `FakeShare` in place of the share
 sheet / save dialog / download, takes a `clock:` for the backup reminder,
 and with `keepPrefs: true` reopens the app over what the last run stored
-(how a test lets days pass).
+(how a test lets days pass). `pickedFile:` is what the file picker returns;
+reading a backup and making thumbnails run inline (a `thumbMaker:` can hold
+an import part-way).
 
 Widget tests run in fake time, where a drift stream (`watch…().first`) never
 completes: read streams inside `tester.runAsync` (one-shot queries and writes

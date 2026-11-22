@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spraywall/app.dart';
+import 'package:spraywall/backup/backup_import.dart';
 import 'package:spraywall/database/database.dart';
 import 'package:spraywall/photos/photo_import.dart';
 import 'package:spraywall/photos/photo_source.dart';
 import 'package:spraywall/providers/app_providers.dart';
 import 'package:spraywall/providers/backup_provider.dart';
 import 'package:spraywall/providers/theme_provider.dart';
+import 'package:spraywall/utils/pick_binary_file.dart';
 import 'package:spraywall/utils/share_file.dart';
 
 /// Hands over fixture bytes instead of opening a picker, and records what
@@ -64,8 +66,11 @@ const phone = Size(400, 800);
 /// a window of [size] logical pixels (a phone unless given). [clock] stands
 /// in for `DateTime.now` where the backup reminder reads it. With
 /// [keepPrefs] it reopens the app over what the last run stored, as a user
-/// coming back days later would.
-/// Photo import runs inline: an isolate never finishes under fake time.
+/// coming back days later would. [pickedFile] is what the file picker hands
+/// back (null: the user backed out); [thumbMaker] replaces the inline
+/// thumbnail maker, to hold an import part-way.
+/// Photo import, reading a backup and making thumbnails run inline: an
+/// isolate never finishes under fake time.
 Future<void> pumpApp(
   WidgetTester tester,
   AppDatabase  db, {
@@ -74,6 +79,8 @@ Future<void> pumpApp(
   FakeShare?   share,
   DateTime Function()? clock,
   bool         keepPrefs = false,
+  Uint8List?   pickedFile,
+  Future<Uint8List> Function(Uint8List)? thumbMaker,
 }) async {
   tester.view.physicalSize     = size;
   tester.view.devicePixelRatio = 1;
@@ -88,6 +95,11 @@ Future<void> pumpApp(
       photoSourceProvider.overrideWithValue(photos ?? FakePhotoSource()),
       photoImporterProvider.overrideWithValue((bytes) async => importPhoto(bytes)),
       shareFileProvider.overrideWithValue((share ?? FakeShare()).call),
+      pickBinaryFileProvider.overrideWithValue(
+          ({required extension}) async => pickedFile),
+      backupParserProvider.overrideWithValue((bytes) async => parseBackup(bytes)),
+      thumbMakerProvider.overrideWithValue(
+          thumbMaker ?? (data) async => makeThumb(data)),
       if (clock != null) clockProvider.overrideWithValue(clock),
     ],
     child: const SpraywallApp(),
