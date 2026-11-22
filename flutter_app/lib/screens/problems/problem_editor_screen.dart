@@ -9,6 +9,7 @@ import '../../marks/opening_photo.dart';
 import '../../providers/app_providers.dart';
 import '../../utils/format_utils.dart';
 import '../../utils/undo_snackbar.dart';
+import '../../widgets/photo_strip.dart';
 import '../../widgets/zoomable_photo.dart';
 import '../not_found_screen.dart';
 import 'problem_details_sheet.dart';
@@ -18,7 +19,16 @@ import 'problem_details_sheet.dart';
 class ProblemEditorScreen extends ConsumerWidget {
   final String  wallId;
   final String? problemId;
-  const ProblemEditorScreen({super.key, required this.wallId, this.problemId});
+
+  /// The photo the problem view was showing, to open on.
+  final String? photoId;
+
+  const ProblemEditorScreen({
+    super.key,
+    required this.wallId,
+    this.problemId,
+    this.photoId,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,7 +65,8 @@ class ProblemEditorScreen extends ConsumerWidget {
     return _Editor(
       wall:    w,
       layout:  l,
-      photo:   openingPhoto(photos.value!, existing)!,
+      photos:  photos.value!,
+      opening: openingPhoto(photos.value!, existing, shown: photoId)!.id,
       problem: problem?.value,
       marks:   existing,
     );
@@ -63,15 +74,17 @@ class ProblemEditorScreen extends ConsumerWidget {
 }
 
 class _Editor extends ConsumerStatefulWidget {
-  final Wall       wall;
-  final Layout     layout;
-  final WallPhoto  photo;
-  final Problem?   problem;
-  final List<Mark> marks;
+  final Wall            wall;
+  final Layout          layout;
+  final List<WallPhoto> photos;
+  final String          opening;
+  final Problem?        problem;
+  final List<Mark>      marks;
   const _Editor({
     required this.wall,
     required this.layout,
-    required this.photo,
+    required this.photos,
+    required this.opening,
     required this.problem,
     required this.marks,
   });
@@ -91,8 +104,29 @@ class _EditorState extends ConsumerState<_Editor> {
                   setOn: dateFromStr(p.setOn)),
   };
   bool _detailsChanged = false;
-  final _tc    = TransformationController();
   bool _holding = false;
+
+  /// The photo on screen, and each photo's pan and zoom while the editor is
+  /// open.
+  late String _photoId = widget.opening;
+  final Map<String, PhotoViewController> _views = {};
+
+  WallPhoto get _photo =>
+      widget.photos.where((p) => p.id == _photoId).firstOrNull ??
+      widget.photos.first;
+
+  PhotoViewController _view(String photoId) =>
+      _views.putIfAbsent(photoId, PhotoViewController.new);
+
+  /// Never leaves a mark selected that is off screen.
+  void _show(String photoId) {
+    if (photoId == _photoId) return;
+    _marks.select(null);
+    setState(() {
+      _photoId = photoId;
+      _holding = false;
+    });
+  }
 
   /// Set once saved: a trash undone after the editor has closed goes into
   /// this problem, through the database captured with it.
@@ -102,7 +136,7 @@ class _EditorState extends ConsumerState<_Editor> {
   bool get _unsaved => (_marks.dirty || _detailsChanged) && _savedId == null;
 
   Size get _photoSize =>
-      Size(widget.photo.width.toDouble(), widget.photo.height.toDouble());
+      Size(_photo.width.toDouble(), _photo.height.toDouble());
 
   @override
   void initState() {
@@ -115,7 +149,9 @@ class _EditorState extends ConsumerState<_Editor> {
     _marks
       ..removeListener(_rebuild)
       ..dispose();
-    _tc.dispose();
+    for (final v in _views.values) {
+      v.dispose();
+    }
     super.dispose();
   }
 
@@ -228,7 +264,8 @@ class _EditorState extends ConsumerState<_Editor> {
 
   @override
   Widget build(BuildContext context) {
-    final photo    = widget.photo;
+    final photo    = _photo;
+    final view     = _view(photo.id);
     final selected = _marks.selected;
     final hint     = _marks.marks.isEmpty
         ? null
@@ -266,12 +303,14 @@ class _EditorState extends ConsumerState<_Editor> {
           Expanded(
             child: Stack(children: [
               ZoomablePhoto(
+                // A fresh viewer per photo, on that photo's own controller.
+                key:        ValueKey(photo.id),
                 photo:      photo,
-                controller: _tc,
+                controller: view,
                 panEnabled: !_holding,
                 overlay: MarkLayer(
                   photo:      _photoSize,
-                  controller: _tc,
+                  controller: view,
                   marks:      _marks.marksOn(photo.id),
                   selectedId: selected?.id,
                   onTapEmpty: (p) {
@@ -292,6 +331,12 @@ class _EditorState extends ConsumerState<_Editor> {
                   child: Center(child: _Hint(hint)),
                 ),
             ]),
+          ),
+          PhotoStrip(
+            photos:    widget.photos,
+            currentId: photo.id,
+            marks:     _marks.marks,
+            onSelect:  _show,
           ),
           _Palette(
             role:     selected?.role ?? _marks.brush,

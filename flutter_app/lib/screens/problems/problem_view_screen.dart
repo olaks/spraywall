@@ -7,6 +7,7 @@ import '../../marks/mark_layer.dart';
 import '../../marks/opening_photo.dart';
 import '../../providers/app_providers.dart';
 import '../../utils/undo_snackbar.dart';
+import '../../widgets/photo_strip.dart';
 import '../../widgets/zoomable_photo.dart';
 import '../not_found_screen.dart';
 
@@ -21,19 +22,6 @@ class ProblemViewScreen extends ConsumerWidget {
     required this.wallId,
     required this.problemId,
   });
-
-  Future<void> _delete(BuildContext context, WidgetRef ref, Problem p) async {
-    // Captured up front: the undo is tapped on the list, after this screen
-    // has gone.
-    final db        = ref.read(dbProvider);
-    final messenger = ScaffoldMessenger.of(context);
-    // Leave first, so this screen never shows the problem as missing.
-    context.go('/walls/$wallId');
-    final deleted = await db.deleteProblem(p.id);
-    showUndoSnackBar(messenger,
-        message: 'Deleted "${p.name}"',
-        onUndo:  () => db.restoreProblem(deleted));
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -51,8 +39,63 @@ class ProblemViewScreen extends ConsumerWidget {
     if (p == null || l == null || l.wallId != wallId) {
       return const NotFoundScreen();
     }
-    final ms    = marks.value!;
-    final photo = openingPhoto(photos!.value!, ms);
+    return _ProblemView(
+        wallId: wallId, problem: p, marks: marks.value!, photos: photos!.value!);
+  }
+}
+
+class _ProblemView extends ConsumerStatefulWidget {
+  final String          wallId;
+  final Problem         problem;
+  final List<Mark>      marks;
+  final List<WallPhoto> photos;
+  const _ProblemView({
+    required this.wallId,
+    required this.problem,
+    required this.marks,
+    required this.photos,
+  });
+
+  @override
+  ConsumerState<_ProblemView> createState() => _ProblemViewState();
+}
+
+class _ProblemViewState extends ConsumerState<_ProblemView> {
+  /// The photo picked on the strip; until then, the opening photo.
+  String? _picked;
+  final Map<String, PhotoViewController> _views = {};
+
+  @override
+  void dispose() {
+    for (final v in _views.values) {
+      v.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _delete() async {
+    final p      = widget.problem;
+    final wallId = widget.wallId;
+    // Captured up front: the undo is tapped on the list, after this screen
+    // has gone.
+    final db        = ref.read(dbProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    // Leave first, so this screen never shows the problem as missing.
+    context.go('/walls/$wallId');
+    final deleted = await db.deleteProblem(p.id);
+    showUndoSnackBar(messenger,
+        message: 'Deleted "${p.name}"',
+        onUndo:  () => db.restoreProblem(deleted));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p     = widget.problem;
+    final ms    = widget.marks;
+    // A picked photo deleted meanwhile falls back to the opening one.
+    final photo = openingPhoto(widget.photos, ms, shown: _picked);
+    final edit  = '/walls/${widget.wallId}/problems/${p.id}/edit'
+        '${photo == null ? '' : '?photo=${photo.id}'}';
 
     return Scaffold(
       appBar: AppBar(
@@ -69,11 +112,11 @@ class ProblemViewScreen extends ConsumerWidget {
             tooltip: 'Problem menu',
             itemBuilder: (_) => [
               PopupMenuItem(
-                onTap: () => context.go('/walls/$wallId/problems/${p.id}/edit'),
+                onTap: () => context.go(edit),
                 child: const Text('Edit'),
               ),
               PopupMenuItem(
-                onTap: () => _delete(context, ref, p),
+                onTap: _delete,
                 child: const Text('Delete'),
               ),
             ],
@@ -84,47 +127,34 @@ class ProblemViewScreen extends ConsumerWidget {
         Expanded(
           child: photo == null
               ? const Center(child: Text('This layout has no photos'))
-              : _ReadOnlyPhoto(photo: photo, marks: ms),
+              : ZoomablePhoto(
+                  key:        ValueKey(photo.id),
+                  photo:      photo,
+                  controller: _views.putIfAbsent(photo.id, PhotoViewController.new),
+                  // No callbacks: it draws, and takes no taps or drags of
+                  // its own.
+                  overlay: MarkLayer(
+                    photo: Size(photo.width.toDouble(), photo.height.toDouble()),
+                    controller: _views[photo.id]!,
+                    marks: [
+                      for (final m in ms)
+                        if (m.photoId == photo.id) EditMark.fromMark(m),
+                    ],
+                  ),
+                ),
         ),
+        if (photo != null)
+          PhotoStrip(
+            photos:      widget.photos,
+            currentId:   photo.id,
+            marks:       [for (final m in ms) EditMark.fromMark(m)],
+            dimUnmarked: true,
+            onSelect:    (id) => setState(() => _picked = id),
+          ),
         if (p.description.isNotEmpty) _DescriptionSheet(problem: p),
       ]),
     );
   }
-}
-
-class _ReadOnlyPhoto extends StatefulWidget {
-  final WallPhoto  photo;
-  final List<Mark> marks;
-  const _ReadOnlyPhoto({required this.photo, required this.marks});
-
-  @override
-  State<_ReadOnlyPhoto> createState() => _ReadOnlyPhotoState();
-}
-
-class _ReadOnlyPhotoState extends State<_ReadOnlyPhoto> {
-  final _tc = TransformationController();
-
-  @override
-  void dispose() {
-    _tc.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => ZoomablePhoto(
-        photo:      widget.photo,
-        controller: _tc,
-        // No callbacks: it draws, and takes no taps or drags of its own.
-        overlay: MarkLayer(
-          photo: Size(widget.photo.width.toDouble(),
-                      widget.photo.height.toDouble()),
-          controller: _tc,
-          marks: [
-            for (final m in widget.marks)
-              if (m.photoId == widget.photo.id) EditMark.fromMark(m),
-          ],
-        ),
-      );
 }
 
 /// The description and set date, folded away with a tap so the photo gets

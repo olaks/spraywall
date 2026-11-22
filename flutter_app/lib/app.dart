@@ -45,6 +45,7 @@ GoRouter buildRouter() => GoRouter(
                   builder: (_, state) => ProblemEditorScreen(
                     wallId:    state.pathParameters['wallId']!,
                     problemId: state.pathParameters['problemId']!,
+                    photoId:   state.uri.queryParameters['photo'],
                   ),
                 ),
               ],

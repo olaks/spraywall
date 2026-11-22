@@ -16,12 +16,21 @@ Matrix4 fitTransform(Size viewport, Size content) {
                         (viewport.height - content.height * f) / 2, 0);
 }
 
+/// One photo's pan and zoom, plus what [ZoomablePhoto] needs to decide
+/// whether to fit: kept apart from the widget, so a photo shown again (after
+/// switching to another) comes back where it was left instead of refitting.
+class PhotoViewController extends TransformationController {
+  /// The viewport and fit factor of the last fit; null until the first.
+  Size?   _viewport;
+  double? _fit;
+}
+
 /// A wall photo in an `InteractiveViewer`, fitted to the screen and free to
 /// pan and zoom. Its child is a box the size of the photo, so anything
 /// [overlay] draws or hit-tests is in photo pixels.
 class ZoomablePhoto extends StatefulWidget {
   final WallPhoto                 photo;
-  final TransformationController? controller;
+  final PhotoViewController?      controller;
   final Widget?                   overlay;
 
   /// Off while a mark or its handle is held, so the drag moves the mark
@@ -41,10 +50,8 @@ class ZoomablePhoto extends StatefulWidget {
 }
 
 class _ZoomablePhotoState extends State<ZoomablePhoto> {
-  late final TransformationController _tc =
-      widget.controller ?? TransformationController();
-  Size?   _viewport;
-  double? _fit;
+  late final PhotoViewController _tc =
+      widget.controller ?? PhotoViewController();
 
   @override
   void dispose() {
@@ -62,12 +69,13 @@ class _ZoomablePhotoState extends State<ZoomablePhoto> {
                            viewport.height / photo.height);
       // Fit on first show, and again on a resize unless the user has zoomed
       // in, so rotating a phone doesn't throw away a close-up.
-      final zoomedIn = _fit != null && _tc.value.getMaxScaleOnAxis() > _fit! * 1.05;
-      if (_fit == null || (viewport != _viewport && !zoomedIn)) {
+      final last     = _tc._fit;
+      final zoomedIn = last != null && _tc.value.getMaxScaleOnAxis() > last * 1.05;
+      if (last == null || (viewport != _tc._viewport && !zoomedIn)) {
         _tc.value = fitTransform(viewport, photo);
-        _fit      = fit;
+        _tc._fit  = fit;
       }
-      _viewport = viewport;
+      _tc._viewport = viewport;
 
       return ColoredBox(
         color: Colors.black,

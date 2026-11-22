@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:spraywall/database/database.dart';
 import 'package:spraywall/marks/opening_photo.dart';
 
-/// Which photo the problem view opens on.
+/// Which photo the problem view and the editor open on.
 void main() {
   WallPhoto photo(String id, int order) => WallPhoto(
       id: id, layoutId: 'l', sortOrder: order, width: 4, height: 3,
@@ -28,5 +28,24 @@ void main() {
   test("else the layout's first photo", () {
     expect(openingPhoto(photos, [])!.id, 'wall');
     expect(openingPhoto([], []), isNull);
+  });
+
+  group('the editor', () {
+    final marks = [mark('kicker', Role.start)];
+
+    test('opens on the photo the view showed', () {
+      expect(openingPhoto(photos, marks, shown: 'wall')!.id, 'wall',
+          reason: 'even one without marks');
+    });
+
+    test('falls back to the view\'s rule when that photo is gone', () {
+      expect(openingPhoto(photos, marks, shown: 'deleted')!.id, 'kicker');
+      expect(openingPhoto(photos, marks)!.id, 'kicker',
+          reason: 'no photo given: a reloaded edit URL');
+    });
+
+    test('opens a new problem on the first photo', () {
+      expect(openingPhoto(photos, [])!.id, 'wall');
+    });
   });
 }
