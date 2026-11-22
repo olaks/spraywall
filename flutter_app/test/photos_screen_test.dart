@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spraywall/database/database.dart';
@@ -23,16 +22,6 @@ void main() {
 
   Future<List<WallPhoto>> photos(WidgetTester tester) async =>
       (await tester.runAsync(() => db.watchPhotos(layout).first))!;
-
-  Future<String> addProblemWithMark(String name, String photoId) async {
-    final id = newId();
-    await db.into(db.problems).insert(ProblemsCompanion.insert(
-        id: Value(id), layoutId: layout, name: name, setOn: '2026-11-22'));
-    await db.into(db.marks).insert(MarksCompanion.insert(
-        problemId: id, photoId: photoId, role: Role.start,
-        cx: 0.5, cy: 0.5, r: 0.02));
-    return id;
-  }
 
   group('wall screen', () {
     testApp('a layout without photos offers to add one, from a file '
@@ -95,7 +84,7 @@ void main() {
         (tester) async {
       final used = await seedPhoto(db, layout, label: 'Whole wall');
       await seedPhoto(db, layout);
-      await addProblemWithMark('Arête', used);
+      await seedProblem(db, layout, marks: [(used, Role.start)]);
       await pumpApp(tester, db);
       await goTo(tester, '/walls/$wall/photos');
 
@@ -137,7 +126,7 @@ void main() {
     testApp('a photo with marks is refused, naming the problems',
         (tester) async {
       final photo = await seedPhoto(db, layout, label: 'Whole wall');
-      await addProblemWithMark('Arête', photo);
+      await seedProblem(db, layout, marks: [(photo, Role.start)]);
       await pumpApp(tester, db);
       await goTo(tester, '/walls/$wall/photos');
 

@@ -24,11 +24,16 @@ class ZoomablePhoto extends StatefulWidget {
   final TransformationController? controller;
   final Widget?                   overlay;
 
+  /// Off while a mark or its handle is held, so the drag moves the mark
+  /// instead of the photo. Zooming stays on.
+  final bool panEnabled;
+
   const ZoomablePhoto({
     super.key,
     required this.photo,
     this.controller,
     this.overlay,
+    this.panEnabled = true,
   });
 
   @override
@@ -69,6 +74,7 @@ class _ZoomablePhotoState extends State<ZoomablePhoto> {
         child: InteractiveViewer(
           transformationController: _tc,
           constrained:    false,
+          panEnabled:     widget.panEnabled,
           minScale:       fit * 0.8,
           // Up to 4 screen px per photo px; a small photo fits above that.
           maxScale:       math.max(4, fit * 2),
@@ -78,7 +84,8 @@ class _ZoomablePhotoState extends State<ZoomablePhoto> {
             size:  photo,
             child: Stack(children: [
               Positioned.fill(child: _PhotoImage(widget.photo)),
-              ?widget.overlay,
+              if (widget.overlay case final overlay?)
+                Positioned.fill(child: overlay),
             ]),
           ),
         ),

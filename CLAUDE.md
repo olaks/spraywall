@@ -74,7 +74,10 @@ binding checks timers before any `addTearDown`, and a failed test that skips
 it hangs the runner for minutes. A button
 enabled by `setState` needs a `pump()` before it can be tapped. A reorder
 drag moves in steps (`moveTo` plus `pump` in a loop) to a point measured from
-the target row; one long jump lands short.
+the target row; one long jump lands short. Let a snackbar slide in
+(`pumpAndSettle`) before tapping its action. Seeding that reads a stream
+(`seedProblem` without explicit marks) goes inside `runAsync` in a widget
+test.
 
 ## Architecture
 

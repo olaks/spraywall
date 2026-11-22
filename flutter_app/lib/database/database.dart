@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import '../photos/photo_import.dart';
 import '../utils/format_utils.dart';
+import '../utils/grades.dart';
 import 'tables.dart';
 export 'tables.dart' show GradeScale, Role, newId;
 
@@ -45,6 +46,26 @@ class DeletedWall {
     required this.marks,
   });
 }
+
+/// Thrown when a problem would share its name with another in its layout,
+/// ignoring case (retired problems included).
+class ProblemNameTaken implements Exception {
+  final String name;
+  const ProblemNameTaken(this.name);
+
+  @override
+  String toString() => 'This layout already has a problem called "$name"';
+}
+
+/// A mark to write, normalised like a stored [Mark] (see tables.dart).
+typedef MarkInput = ({
+  String id,
+  String photoId,
+  Role   role,
+  double cx,
+  double cy,
+  double r,
+});
 
 /// Thrown when a photo would be deleted while marks sit on it.
 class PhotoInUse implements Exception {
@@ -370,4 +391,120 @@ class AppDatabase extends _$AppDatabase {
         b.insert(wallPhotos,     d.photo);
         b.insert(wallPhotoBytes, d.image);
       });
+
+  // ── Problems ───────────────────────────────────────────────────────────
+
+  /// A layout's problems, retired ones included, by name.
+  Stream<List<Problem>> watchProblems(String layoutId) => (select(problems)
+        ..where((p) => p.layoutId.equals(layoutId))
+        ..orderBy([(p) => OrderingTerm(
+            expression: p.name.collate(Collate.noCase))]))
+      .watch();
+
+  /// A problem's marks in the order they were placed, which is the order
+  /// they draw in.
+  Future<List<Mark>> marksOf(String problemId) => (select(marks)
+        ..where((m) => m.problemId.equals(problemId))
+        ..orderBy([(_) => OrderingTerm(expression: _rowid)]))
+      .get();
+
+  static const _rowid = CustomExpression<int>('rowid');
+
+  /// Whether [name] is taken in [layoutId] by a problem other than
+  /// [exceptId], ignoring case. Compared in Dart, like [wallNameTaken].
+  Future<bool> problemNameTaken(String layoutId, String name,
+      {String? exceptId}) async {
+    final wanted = name.trim().toLowerCase();
+    final all = await (select(problems)
+          ..where((p) => p.layoutId.equals(layoutId)))
+        .get();
+    return all.any((p) => p.id != exceptId && p.name.toLowerCase() == wanted);
+  }
+
+  /// Writes a new problem and its marks in one transaction. Returns its id.
+  ///
+  /// Throws [ProblemNameTaken] for a name in use in the layout, and
+  /// [ArgumentError] for a blank name, no marks, a grade off the wall's
+  /// scale, or a mark on a photo from another layout.
+  Future<String> createProblem({
+    required String          layoutId,
+    required String          name,
+    String?                  grade,
+    String                   description = '',
+    required DateTime        setOn,
+    required List<MarkInput> marks,
+  }) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) throw ArgumentError.value(name, 'name', 'is blank');
+    if (marks.isEmpty) throw ArgumentError('A problem needs at least one mark');
+    return transaction(() async {
+      if (await problemNameTaken(layoutId, trimmed)) {
+        throw ProblemNameTaken(trimmed);
+      }
+      await _checkGrade(layoutId, grade);
+      final photoIds = {
+        for (final p in await (select(wallPhotos)
+              ..where((p) => p.layoutId.equals(layoutId)))
+            .get())
+          p.id,
+      };
+      if (!marks.every((m) => photoIds.contains(m.photoId))) {
+        throw ArgumentError("A mark's photo must belong to the problem's layout");
+      }
+
+      final id = newId();
+      await into(problems).insert(ProblemsCompanion.insert(
+        id:          Value(id),
+        layoutId:    layoutId,
+        name:        trimmed,
+        grade:       Value(grade),
+        description: Value(description.trim()),
+        setOn:       dateStrFrom(setOn),
+      ));
+      await batch((b) => b.insertAll(this.marks, [
+            for (final m in marks) _markRow(id, m),
+          ]));
+      return id;
+    });
+  }
+
+  /// Appends one mark to a saved problem: a trash undone after the editor
+  /// that offered it has saved and closed. Returns false if the problem or
+  /// the photo has gone since.
+  Future<bool> addMark(String problemId, MarkInput mark) =>
+      transaction(() async {
+        final problem = await (select(problems)
+              ..where((p) => p.id.equals(problemId)))
+            .getSingleOrNull();
+        final photo = await (select(wallPhotos)
+              ..where((p) => p.id.equals(mark.photoId)))
+            .getSingleOrNull();
+        if (problem == null || photo == null ||
+            photo.layoutId != problem.layoutId) {
+          return false;
+        }
+        await into(marks).insert(_markRow(problemId, mark),
+            mode: InsertMode.insertOrIgnore);
+        return true;
+      });
+
+  MarksCompanion _markRow(String problemId, MarkInput m) =>
+      MarksCompanion.insert(
+        id: Value(m.id), problemId: problemId, photoId: m.photoId,
+        role: m.role, cx: m.cx, cy: m.cy, r: m.r,
+      );
+
+  /// Throws [ArgumentError] unless [grade] is null or on the scale of the
+  /// layout's wall.
+  Future<void> _checkGrade(String layoutId, String? grade) async {
+    if (grade == null) return;
+    final wall = await (select(walls).join([
+      innerJoin(layouts, layouts.wallId.equalsExp(walls.id)),
+    ])..where(layouts.id.equals(layoutId)))
+        .map((r) => r.readTable(walls))
+        .getSingle();
+    if (!gradesFor(wall.gradeScale).contains(grade)) {
+      throw ArgumentError.value(grade, 'grade', 'is not on the wall\'s scale');
+    }
+  }
 }

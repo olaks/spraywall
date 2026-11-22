@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -36,7 +35,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Home wall'), findsOneWidget);
     expect(find.text('V grades'), findsOneWidget);
-
   });
 
   testApp('a clashing name keeps the dialog open with a reason',
@@ -85,7 +83,6 @@ void main() {
     final walls = await tester.runAsync(() => db.watchWalls().first);
     expect(walls!.map((w) => w.name), ['Home wall', 'Garage'],
         reason: 'back in its old place');
-
   });
 
   testApp('dragging a wall by its handle reorders the list',
@@ -120,16 +117,14 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(find.text('Cellar'), findsOneWidget);
-
   });
 
   testApp('the grade scale is locked once a problem has a grade',
       (tester) async {
     final id     = await seedWall(db, name: 'Home wall');
-    final layout = await tester.runAsync(() => db.watchCurrentLayout(id).first);
-    await db.into(db.problems).insert(ProblemsCompanion.insert(
-        layoutId: layout!.id, name: 'Arête', grade: const Value('6B'),
-        setOn: '2026-11-22'));
+    // Seeding reads drift streams, which only complete in real async.
+    await tester.runAsync(() async =>
+        seedProblem(db, await currentLayoutId(db, id), grade: '6B'));
     await pumpApp(tester, db);
 
     await openEditWall(tester, 'Home wall');

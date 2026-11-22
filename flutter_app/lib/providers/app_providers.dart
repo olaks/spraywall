@@ -35,3 +35,7 @@ final photoUsageProvider = StreamProvider.family<Map<String, int>, String>(
 final photoImageProvider =
     FutureProvider.autoDispose.family<WallPhotoImage?, String>(
         (ref, id) => ref.watch(dbProvider).photoImage(id));
+
+/// A layout's problems, retired ones included, by name.
+final problemsProvider = StreamProvider.family<List<Problem>, String>(
+    (ref, layoutId) => ref.watch(dbProvider).watchProblems(layoutId));

@@ -8,8 +8,8 @@ import '../../utils/undo_snackbar.dart';
 import '../not_found_screen.dart';
 import 'edit_wall_dialog.dart';
 
-/// A wall's current layout. For now only its frame: the problem list arrives
-/// with ticket 04.
+/// A wall's current layout: its problems, in a plain list until ticket 07
+/// adds filters, sort and thumbnails.
 class WallScreen extends ConsumerWidget {
   final String wallId;
   const WallScreen({super.key, required this.wallId});
@@ -47,6 +47,7 @@ class WallScreen extends ConsumerWidget {
     if (w == null || l == null) return const NotFoundScreen();
     final photos    = ref.watch(photosProvider(l.id)).value;
     final hasPhotos = photos?.isNotEmpty ?? false;
+    final problems  = ref.watch(problemsProvider(l.id)).value;
 
     return Scaffold(
       appBar: AppBar(
@@ -75,24 +76,40 @@ class WallScreen extends ConsumerWidget {
         ],
       ),
       // Problems are set on photos, so the first thing a layout needs is one.
-      floatingActionButton: photos != null && !hasPhotos
+      floatingActionButton: photos == null ? null : hasPhotos
           ? FloatingActionButton.extended(
+              onPressed: () => context.go('/walls/${w.id}/problems/new'),
+              icon:      const Icon(Icons.add),
+              label:     const Text('New problem'),
+            )
+          : FloatingActionButton.extended(
               onPressed: () => addWallPhoto(context, ref, l.id),
               icon:      const Icon(Icons.add_a_photo_outlined),
               label:     const Text('Add a wall photo'),
-            )
-          : null,
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            photos == null ? '' :
-            hasPhotos      ? 'No problems yet'
-                           : 'No wall photos yet',
-            textAlign: TextAlign.center,
+            ),
+      body: switch ((photos, problems)) {
+        (null, _) || (_, null) => const SizedBox.shrink(),
+        (final ps?, final list?) when ps.isEmpty || list.isEmpty => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text(
+                ps.isEmpty ? 'No wall photos yet' : 'No problems yet',
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
-        ),
-      ),
+        (_, final list?) => ListView(
+            padding: const EdgeInsets.only(bottom: 88),
+            children: [
+              for (final p in list)
+                ListTile(
+                  title:    Text(p.name),
+                  trailing: Text(p.grade ?? '–',
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+            ],
+          ),
+      },
     );
   }
 }

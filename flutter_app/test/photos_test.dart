@@ -18,19 +18,6 @@ void main() {
   Future<List<String?>> labels() async =>
       (await db.watchPhotos(layout).first).map((p) => p.label).toList();
 
-  // Problems have no API until ticket 04; these insert rows directly.
-  Future<String> addProblem(String name) async {
-    final id = newId();
-    await db.into(db.problems).insert(ProblemsCompanion.insert(
-        id: Value(id), layoutId: layout, name: name, setOn: '2026-11-22'));
-    return id;
-  }
-
-  Future<void> addMark(String problemId, String photoId) =>
-      db.into(db.marks).insert(MarksCompanion.insert(
-          problemId: problemId, photoId: photoId, role: Role.hand,
-          cx: 0.5, cy: 0.5, r: 0.02));
-
   test('a photo stores its size and bytes, and goes to the end', () async {
     await seedPhoto(db, layout, label: 'Whole wall', width: 40, height: 30);
     final id = await seedPhoto(db, layout, label: 'Kicker', width: 30, height: 40);
@@ -62,11 +49,9 @@ void main() {
   test('usage counts problems, not marks', () async {
     final used   = await seedPhoto(db, layout);
     final unused = await seedPhoto(db, layout);
-    final p1 = await addProblem('Arête');
-    final p2 = await addProblem('Crimps');
-    await addMark(p1, used);
-    await addMark(p1, used);
-    await addMark(p2, used);
+    await seedProblem(db, layout, name: 'Arête',
+        marks: [(used, Role.start), (used, Role.hand)]);
+    await seedProblem(db, layout, name: 'Crimps', marks: [(used, Role.foot)]);
 
     final usage = await db.watchPhotoUsage(layout).first;
     expect(usage[used], 2);
@@ -94,12 +79,13 @@ void main() {
 
   test('a photo with marks is refused, naming the problems', () async {
     final photo = await seedPhoto(db, layout);
-    await addMark(await addProblem('Crimps'), photo);
-    await addMark(await addProblem('Arête'), photo);
-    final retired = await addProblem('Old one');
+    await seedProblem(db, layout, name: 'Crimps', marks: [(photo, Role.hand)]);
+    await seedProblem(db, layout, name: 'Arête',  marks: [(photo, Role.hand)]);
+    final retired = await seedProblem(db, layout, name: 'Old one',
+        marks: [(photo, Role.hand)]);
+    // Retiring has no API until ticket 08.
     await (db.update(db.problems)..where((p) => p.id.equals(retired)))
         .write(const ProblemsCompanion(retiredOn: Value('2026-11-01')));
-    await addMark(retired, photo);
 
     await expectLater(
         db.deletePhoto(photo),

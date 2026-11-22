@@ -6,6 +6,7 @@ import 'providers/theme_provider.dart';
 import 'screens/not_found_screen.dart';
 import 'screens/photos/photo_viewer_screen.dart';
 import 'screens/photos/photos_screen.dart';
+import 'screens/problems/problem_editor_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/walls/wall_list_screen.dart';
 import 'screens/walls/wall_screen.dart';
@@ -26,6 +27,11 @@ GoRouter buildRouter() => GoRouter(
           builder: (_, state) =>
               WallScreen(wallId: state.pathParameters['wallId']!),
           routes: [
+            GoRoute(
+              path: 'problems/new',
+              builder: (_, state) =>
+                  ProblemEditorScreen(wallId: state.pathParameters['wallId']!),
+            ),
             GoRoute(
               path: 'photos',
               builder: (_, state) =>

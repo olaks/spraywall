@@ -36,6 +36,34 @@ Future<String> seedPhoto(
     db.addPhoto(layoutId, importPhoto(jpegFixture(width: width, height: height)),
         label: label);
 
+/// A problem on [layoutId] through the real create. [marks] are
+/// (photo id, role) pairs, placed in order across the photo; by default one
+/// hand mark on the layout's first photo, which is seeded if there is none.
+/// Returns the problem's id.
+Future<String> seedProblem(
+  AppDatabase          db,
+  String               layoutId, {
+  String               name  = 'Arête',
+  String?              grade,
+  List<(String, Role)>? marks,
+}) async {
+  final pairs = marks ?? [
+    ((await db.watchPhotos(layoutId).first).firstOrNull?.id ??
+        await seedPhoto(db, layoutId), Role.hand),
+  ];
+  return db.createProblem(
+    layoutId: layoutId,
+    name:     name,
+    grade:    grade,
+    setOn:    DateTime(2026, 11, 22),
+    marks: [
+      for (final (i, (photoId, role)) in pairs.indexed)
+        (id: newId(), photoId: photoId, role: role,
+         cx: (i + 1) / (pairs.length + 1), cy: 0.5, r: 0.02),
+    ],
+  );
+}
+
 /// The id of the wall's current layout.
 Future<String> currentLayoutId(AppDatabase db, String wallId) async =>
     (await db.watchCurrentLayout(wallId).first)!.id;

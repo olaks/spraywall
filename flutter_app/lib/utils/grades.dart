@@ -1,3 +1,5 @@
+import '../database/tables.dart' show GradeScale;
+
 /// Fontainebleau bouldering grades (most common globally).
 const fontGrades = [
   '3', '4', '4+', '5', '5+',
@@ -22,3 +24,9 @@ List<String> detectGradeScale(Iterable<String> grades) {
 
 /// Maps a grade string to its numeric index in [scale], or −1 if not found.
 int gradeToIndex(String grade, List<String> scale) => scale.indexOf(grade);
+
+/// The grades a wall on [scale] offers, easiest first.
+List<String> gradesFor(GradeScale scale) => switch (scale) {
+      GradeScale.font => fontGrades,
+      GradeScale.v    => vGrades,
+    };
