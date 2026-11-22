@@ -103,6 +103,7 @@ class WallScreen extends ConsumerWidget {
             children: [
               for (final p in list)
                 ListTile(
+                  onTap:    () => context.go('/walls/${w.id}/problems/${p.id}'),
                   title:    Text(p.name),
                   trailing: Text(p.grade ?? '–',
                       style: Theme.of(context).textTheme.titleMedium),

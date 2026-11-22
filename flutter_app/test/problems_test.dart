@@ -61,8 +61,8 @@ void main() {
   });
 
   test('needs a name and at least one mark', () async {
-    expect(() => create('   '), throwsArgumentError);
-    expect(() => create('Empty', marks: []), throwsArgumentError);
+    await expectLater(create('   '), throwsArgumentError);
+    await expectLater(create('Empty', marks: []), throwsArgumentError);
     expect(await db.watchProblems(layout).first, isEmpty);
   });
 
@@ -96,6 +96,71 @@ void main() {
       expect(await db.addMark(newId(), mark(Role.hand)), isFalse,
           reason: 'no such problem');
       expect(await db.marksOf(id), hasLength(1));
+    });
+  });
+
+  group('update', () {
+    test('replaces details and marks, keeping mark ids where given', () async {
+      final id   = await create('Arête', grade: '6A');
+      final kept = (await db.marksOf(id)).single;
+      final next = mark(Role.finish, cx: 0.9);
+      await db.updateProblem(id,
+          details: (name: 'Arête direct', grade: '6B+',
+                    description: 'Stand start', setOn: DateTime(2026, 11, 1)),
+          marks: [
+            (id: kept.id, photoId: kept.photoId, role: Role.hand,
+             cx: kept.cx, cy: kept.cy, r: kept.r),
+            next,
+          ]);
+
+      final p = (await db.watchProblem(id).first)!;
+      expect((p.name, p.grade, p.description, p.setOn),
+          ('Arête direct', '6B+', 'Stand start', '2026-11-01'));
+      final stored = await db.marksOf(id);
+      expect(stored.map((m) => (m.id, m.role)),
+          [(kept.id, Role.hand), (next.id, Role.finish)]);
+    });
+
+    test('may keep its own name in another case, not take another', () async {
+      final id = await create('Arête');
+      await create('Crimps');
+      ProblemDetails named(String n) =>
+          (name: n, grade: null, description: '', setOn: DateTime(2026, 11, 22));
+      await db.updateProblem(id, details: named('ARÊTE'), marks: [mark(Role.start)]);
+      await expectLater(
+          db.updateProblem(id, details: named('crimps'), marks: [mark(Role.start)]),
+          throwsA(isA<ProblemNameTaken>()));
+      expect((await db.watchProblem(id).first)!.name, 'ARÊTE');
+      expect(await db.marksOf(id), hasLength(1),
+          reason: 'a refused update leaves the marks as they were');
+    });
+  });
+
+  group('delete', () {
+    test('takes the marks too, and undo restores identical rows', () async {
+      final id = await create('Arête', marks: [
+        mark(Role.start, cx: 0.1), mark(Role.hand, cx: 0.2), mark(Role.finish, cx: 0.3),
+      ]);
+      await create('Crimps');
+      final problemsBefore = await db.select(db.problems).get();
+      final marksBefore    = await db.marksOf(id);
+
+      final deleted = await db.deleteProblem(id);
+      expect(await db.watchProblem(id).first, isNull);
+      expect(await db.select(db.marks).get(), hasLength(1),
+          reason: "only Crimps' mark is left");
+
+      await db.restoreProblem(deleted);
+      expect((await db.select(db.problems).get()).toSet(), problemsBefore.toSet());
+      expect(await db.marksOf(id), marksBefore, reason: 'same rows, same order');
+    });
+
+    test('undo after the name was reused restores as "Name (2)"', () async {
+      final deleted = await db.deleteProblem(await create('Arête'));
+      await create('arête');
+      await db.restoreProblem(deleted);
+      expect((await db.watchProblems(layout).first).map((p) => p.name),
+          containsAll(['arête', 'Arête (2)']));
     });
   });
 }

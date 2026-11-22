@@ -220,7 +220,8 @@ void main() {
     await tester.pump();
 
     await saveAs(tester, 'Arête');
-    expect(find.byType(MarkLayer), findsNothing, reason: 'the editor closed');
+    expect(find.byType(ChoiceChip), findsNothing,
+        reason: 'the editor closed (the view draws marks, but has no palette)');
     await tester.tap(find.text('UNDO'));
     await tester.pumpAndSettle();
 
@@ -230,7 +231,7 @@ void main() {
     expect(stored, hasLength(2));
   });
 
-  testApp('save asks for details, and the problem joins the wall list',
+  testApp('save asks for details, opens the problem, and it joins the list',
       (tester) async {
     // Seeding reads drift streams, which only complete in real async.
     await tester.runAsync(() => seedProblem(db, layout, name: 'Crimps'));
@@ -251,7 +252,13 @@ void main() {
     await tester.tap(find.text('Save problem'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Home wall'), findsOneWidget, reason: 'back on the wall');
+    // Saving opens the new problem's view; back is the wall's list.
+    expect(find.text('Arête'), findsOneWidget);
+    expect(find.text('6B'), findsOneWidget);
+    expect(find.byTooltip('Problem menu'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Home wall'), findsOneWidget);
     expect(find.text('Arête'), findsOneWidget);
     expect(find.text('6B'), findsOneWidget);
     final saved = (await tester.runAsync(() => db.watchProblems(layout).first))!

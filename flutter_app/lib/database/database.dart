@@ -67,6 +67,21 @@ typedef MarkInput = ({
   double r,
 });
 
+/// What a problem is besides its marks: the details sheet's fields.
+typedef ProblemDetails = ({
+  String   name,
+  String?  grade,
+  String   description,
+  DateTime setOn,
+});
+
+/// What [AppDatabase.deleteProblem] removed, for [AppDatabase.restoreProblem].
+class DeletedProblem {
+  final Problem    problem;
+  final List<Mark> marks; // in drawing order
+  const DeletedProblem({required this.problem, required this.marks});
+}
+
 /// Thrown when a photo would be deleted while marks sit on it.
 class PhotoInUse implements Exception {
   /// The problems with marks on the photo, by name, retired ones included.
@@ -401,12 +416,21 @@ class AppDatabase extends _$AppDatabase {
             expression: p.name.collate(Collate.noCase))]))
       .watch();
 
+  /// One problem, or null once it is gone.
+  Stream<Problem?> watchProblem(String id) =>
+      (select(problems)..where((p) => p.id.equals(id))).watchSingleOrNull();
+
   /// A problem's marks in the order they were placed, which is the order
   /// they draw in.
-  Future<List<Mark>> marksOf(String problemId) => (select(marks)
+  Future<List<Mark>> marksOf(String problemId) => _marksOf(problemId).get();
+
+  Stream<List<Mark>> watchMarksOf(String problemId) =>
+      _marksOf(problemId).watch();
+
+  SimpleSelectStatement<$MarksTable, Mark> _marksOf(String problemId) =>
+      select(marks)
         ..where((m) => m.problemId.equals(problemId))
-        ..orderBy([(_) => OrderingTerm(expression: _rowid)]))
-      .get();
+        ..orderBy([(_) => OrderingTerm(expression: _rowid)]);
 
   static const _rowid = CustomExpression<int>('rowid');
 
@@ -435,23 +459,8 @@ class AppDatabase extends _$AppDatabase {
     required List<MarkInput> marks,
   }) {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) throw ArgumentError.value(name, 'name', 'is blank');
-    if (marks.isEmpty) throw ArgumentError('A problem needs at least one mark');
     return transaction(() async {
-      if (await problemNameTaken(layoutId, trimmed)) {
-        throw ProblemNameTaken(trimmed);
-      }
-      await _checkGrade(layoutId, grade);
-      final photoIds = {
-        for (final p in await (select(wallPhotos)
-              ..where((p) => p.layoutId.equals(layoutId)))
-            .get())
-          p.id,
-      };
-      if (!marks.every((m) => photoIds.contains(m.photoId))) {
-        throw ArgumentError("A mark's photo must belong to the problem's layout");
-      }
-
+      await _checkProblem(layoutId, trimmed, grade, marks);
       final id = newId();
       await into(problems).insert(ProblemsCompanion.insert(
         id:          Value(id),
@@ -461,12 +470,90 @@ class AppDatabase extends _$AppDatabase {
         description: Value(description.trim()),
         setOn:       dateStrFrom(setOn),
       ));
-      await batch((b) => b.insertAll(this.marks, [
-            for (final m in marks) _markRow(id, m),
-          ]));
+      await _insertMarks(id, marks);
       return id;
     });
   }
+
+  /// Replaces a problem's details and marks in one transaction, with the
+  /// same checks as [createProblem]. Mark ids are kept where given.
+  Future<void> updateProblem(
+    String id, {
+    required ProblemDetails  details,
+    required List<MarkInput> marks,
+  }) {
+    final trimmed = details.name.trim();
+    return transaction(() async {
+      final problem = await (select(problems)..where((p) => p.id.equals(id)))
+          .getSingle();
+      await _checkProblem(problem.layoutId, trimmed, details.grade, marks,
+          exceptId: id);
+      await (update(problems)..where((p) => p.id.equals(id))).write(
+          ProblemsCompanion(
+            name:        Value(trimmed),
+            grade:       Value(details.grade),
+            description: Value(details.description.trim()),
+            setOn:       Value(dateStrFrom(details.setOn)),
+          ));
+      await (delete(this.marks)..where((m) => m.problemId.equals(id))).go();
+      await _insertMarks(id, marks);
+    });
+  }
+
+  /// Deletes a problem and its marks. Returns what it removed for
+  /// [restoreProblem].
+  Future<DeletedProblem> deleteProblem(String id) => transaction(() async {
+        final problem = await (select(problems)..where((p) => p.id.equals(id)))
+            .getSingle();
+        final ms = await marksOf(id);
+        await (delete(marks)..where((m) => m.problemId.equals(id))).go();
+        await (delete(problems)..where((p) => p.id.equals(id))).go();
+        return DeletedProblem(problem: problem, marks: ms);
+      });
+
+  /// Puts back what [deleteProblem] removed, marks in their drawing order. If
+  /// another problem in the layout took the name meanwhile, the restored one
+  /// becomes `Name (2)`.
+  Future<void> restoreProblem(DeletedProblem d) => transaction(() async {
+        final taken = (await (select(problems)
+                  ..where((p) => p.layoutId.equals(d.problem.layoutId)))
+                .get())
+            .map((p) => p.name);
+        await into(problems).insert(
+            d.problem.copyWith(name: freeName(d.problem.name, taken)));
+        await batch((b) => b.insertAll(marks, d.marks));
+      });
+
+  /// Throws as [createProblem] documents, unless the problem is fine to
+  /// write into [layoutId].
+  Future<void> _checkProblem(
+    String          layoutId,
+    String          name,
+    String?         grade,
+    List<MarkInput> marks, {
+    String?         exceptId,
+  }) async {
+    if (name.isEmpty) throw ArgumentError.value(name, 'name', 'is blank');
+    if (marks.isEmpty) throw ArgumentError('A problem needs at least one mark');
+    if (await problemNameTaken(layoutId, name, exceptId: exceptId)) {
+      throw ProblemNameTaken(name);
+    }
+    await _checkGrade(layoutId, grade);
+    final photoIds = {
+      for (final p in await (select(wallPhotos)
+            ..where((p) => p.layoutId.equals(layoutId)))
+          .get())
+        p.id,
+    };
+    if (!marks.every((m) => photoIds.contains(m.photoId))) {
+      throw ArgumentError("A mark's photo must belong to the problem's layout");
+    }
+  }
+
+  Future<void> _insertMarks(String problemId, List<MarkInput> ms) =>
+      batch((b) => b.insertAll(marks, [
+            for (final m in ms) _markRow(problemId, m),
+          ]));
 
   /// Appends one mark to a saved problem: a trash undone after the editor
   /// that offered it has saved and closed. Returns false if the problem or

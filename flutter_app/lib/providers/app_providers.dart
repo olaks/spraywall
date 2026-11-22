@@ -39,3 +39,15 @@ final photoImageProvider =
 /// A layout's problems, retired ones included, by name.
 final problemsProvider = StreamProvider.family<List<Problem>, String>(
     (ref, layoutId) => ref.watch(dbProvider).watchProblems(layoutId));
+
+final problemProvider = StreamProvider.family<Problem?, String>(
+    (ref, id) => ref.watch(dbProvider).watchProblem(id));
+
+/// A problem's marks in drawing order.
+final problemMarksProvider = StreamProvider.family<List<Mark>, String>(
+    (ref, problemId) => ref.watch(dbProvider).watchMarksOf(problemId));
+
+/// One layout, current or archived. A layout never changes walls, so a
+/// one-shot read is enough to place a problem.
+final layoutProvider = FutureProvider.family<Layout?, String>(
+    (ref, id) => ref.watch(dbProvider).layout(id));

@@ -21,6 +21,13 @@ class EditMark {
     required this.r,
   });
 
+  EditMark.fromMark(Mark m)
+      : id = m.id, photoId = m.photoId, role = m.role,
+        cx = m.cx, cy = m.cy, r = m.r;
+
+  MarkInput get input =>
+      (id: id, photoId: photoId, role: role, cx: cx, cy: cy, r: r);
+
   EditMark copyWith({Role? role, double? cx, double? cy, double? r}) => EditMark(
         id: id, photoId: photoId,
         role: role ?? this.role,

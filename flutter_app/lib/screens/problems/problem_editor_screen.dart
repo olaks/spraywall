@@ -5,57 +5,101 @@ import '../../database/database.dart';
 import '../../marks/mark_editor.dart';
 import '../../marks/mark_geometry.dart';
 import '../../marks/mark_layer.dart';
+import '../../marks/opening_photo.dart';
 import '../../providers/app_providers.dart';
+import '../../utils/format_utils.dart';
 import '../../utils/undo_snackbar.dart';
 import '../../widgets/zoomable_photo.dart';
 import '../not_found_screen.dart';
 import 'problem_details_sheet.dart';
 
-/// Sets a new problem: marks first, on the layout's first photo, then the
-/// details on Save. Never adds photos; the wall screen does that.
+/// Sets a new problem (no [problemId]) or edits one: marks first, details
+/// in a sheet. Never adds photos; the wall screen does that.
 class ProblemEditorScreen extends ConsumerWidget {
-  final String wallId;
-  const ProblemEditorScreen({super.key, required this.wallId});
+  final String  wallId;
+  final String? problemId;
+  const ProblemEditorScreen({super.key, required this.wallId, this.problemId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final wall   = ref.watch(wallProvider(wallId));
-    final layout = ref.watch(currentLayoutProvider(wallId));
-    final w = wall.value;
-    final l = layout.value;
-    final photos = l == null ? null : ref.watch(photosProvider(l.id)).value;
-    if (wall.isLoading || layout.isLoading || (l != null && photos == null)) {
+    final id = problemId;
+    final wall = ref.watch(wallProvider(wallId));
+    final problem = id == null ? null : ref.watch(problemProvider(id));
+    final marks   = id == null ? null : ref.watch(problemMarksProvider(id));
+    // A new problem goes on the current layout; an existing one stays on its own.
+    final layout = id == null
+        ? ref.watch(currentLayoutProvider(wallId))
+        : problem!.value == null
+            ? null
+            : ref.watch(layoutProvider(problem.value!.layoutId));
+    final l      = layout?.value;
+    final photos = l == null ? null : ref.watch(photosProvider(l.id));
+
+    final loading = [wall, problem, marks, layout, photos]
+        .any((v) => v != null && v.isLoading);
+    if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (w == null || l == null) return const NotFoundScreen();
-    if (photos!.isEmpty) {
+    final w = wall.value;
+    if (w == null || l == null || l.wallId != w.id ||
+        (id != null && problem?.value == null)) {
+      return const NotFoundScreen();
+    }
+    if (photos!.value!.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('New problem')),
         body: const Center(child: Text('Add a wall photo first')),
       );
     }
-    return _Editor(wall: w, layout: l, photo: photos.first);
+    final existing = marks?.value ?? const <Mark>[];
+    return _Editor(
+      wall:    w,
+      layout:  l,
+      photo:   openingPhoto(photos.value!, existing)!,
+      problem: problem?.value,
+      marks:   existing,
+    );
   }
 }
 
 class _Editor extends ConsumerStatefulWidget {
-  final Wall      wall;
-  final Layout    layout;
-  final WallPhoto photo;
-  const _Editor({required this.wall, required this.layout, required this.photo});
+  final Wall       wall;
+  final Layout     layout;
+  final WallPhoto  photo;
+  final Problem?   problem;
+  final List<Mark> marks;
+  const _Editor({
+    required this.wall,
+    required this.layout,
+    required this.photo,
+    required this.problem,
+    required this.marks,
+  });
 
   @override
   ConsumerState<_Editor> createState() => _EditorState();
 }
 
 class _EditorState extends ConsumerState<_Editor> {
-  final _marks = MarkEditorController();
+  late final _marks = MarkEditorController(
+      [for (final m in widget.marks) EditMark.fromMark(m)]);
+
+  /// An existing problem's details, as edited so far.
+  late ProblemDetails? _details = switch (widget.problem) {
+    null      => null,
+    final p   => (name: p.name, grade: p.grade, description: p.description,
+                  setOn: dateFromStr(p.setOn)),
+  };
+  bool _detailsChanged = false;
   final _tc    = TransformationController();
   bool _holding = false;
 
   /// Set once saved: a trash undone after the editor has closed goes into
   /// this problem, through the database captured with it.
   String? _savedId;
+
+  bool get _isNew  => widget.problem == null;
+  bool get _unsaved => (_marks.dirty || _detailsChanged) && _savedId == null;
 
   Size get _photoSize =>
       Size(widget.photo.width.toDouble(), widget.photo.height.toDouble());
@@ -89,28 +133,73 @@ class _EditorState extends ConsumerState<_Editor> {
         if (mounted) {
           _marks.untrash(trashed);
         } else if (_savedId case final id?) {
-          db.addMark(id, _input(trashed.mark));
+          db.addMark(id, trashed.mark.input);
         }
         // Discarded: there is nothing left to put it back into.
       },
     );
   }
 
+  List<MarkInput> get _inputs => [for (final m in _marks.marks) m.input];
+
+  Future<ProblemDetails?> _detailsSheet({
+    required String                            actionLabel,
+    required Future<void> Function(ProblemDetails) submit,
+  }) =>
+      showModalBottomSheet<ProblemDetails>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => ProblemDetailsSheet(
+          gradeScale:  widget.wall.gradeScale,
+          initial:     _details,
+          actionLabel: actionLabel,
+          submit:      submit,
+        ),
+      );
+
+  /// A new problem: the details sheet, which creates it with the marks.
+  /// An existing one: details and marks written together.
   Future<void> _save() async {
-    final id = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => ProblemDetailsSheet(
-        db:         ref.read(dbProvider),
-        layoutId:   widget.layout.id,
-        gradeScale: widget.wall.gradeScale,
-        marks:      [for (final m in _marks.marks) _input(m)],
-      ),
+    final db = ref.read(dbProvider);
+    if (_isNew) {
+      String? created;
+      await _detailsSheet(
+        actionLabel: 'Save problem',
+        submit: (d) async => created = await db.createProblem(
+          layoutId: widget.layout.id, name: d.name, grade: d.grade,
+          description: d.description, setOn: d.setOn, marks: _inputs,
+        ),
+      );
+      if (created == null) return;
+      _savedId = created;
+    } else {
+      await db.updateProblem(widget.problem!.id,
+          details: _details!, marks: _inputs);
+      _savedId = widget.problem!.id;
+    }
+    if (!mounted) return;
+    setState(() {});
+    context.go('/walls/${widget.wall.id}/problems/$_savedId');
+  }
+
+  /// An existing problem's details, checked but kept until Save.
+  Future<void> _editDetails() async {
+    final db = ref.read(dbProvider);
+    final id = widget.problem!.id;
+    final d = await _detailsSheet(
+      actionLabel: 'Done',
+      submit: (d) async {
+        if (await db.problemNameTaken(widget.layout.id, d.name, exceptId: id)) {
+          throw ProblemNameTaken(d.name);
+        }
+      },
     );
-    if (id == null || !mounted) return;
-    setState(() => _savedId = id);
-    context.go('/walls/${widget.wall.id}');
+    if (d == null || !mounted) return;
+    setState(() {
+      _details        = d;
+      _detailsChanged = true;
+    });
   }
 
   Future<void> _confirmLeave() async {
@@ -131,13 +220,11 @@ class _EditorState extends ConsumerState<_Editor> {
         ],
       ),
     );
-    if (discard == true && mounted) context.go('/walls/${widget.wall.id}');
+    if (discard != true || !mounted) return;
+    context.go(_isNew
+        ? '/walls/${widget.wall.id}'
+        : '/walls/${widget.wall.id}/problems/${widget.problem!.id}');
   }
-
-  static MarkInput _input(EditMark m) => (
-        id: m.id, photoId: m.photoId, role: m.role,
-        cx: m.cx, cy: m.cy, r: m.r,
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -153,14 +240,19 @@ class _EditorState extends ConsumerState<_Editor> {
           };
 
     return PopScope(
-      canPop: !_marks.dirty || _savedId != null,
+      canPop: !_unsaved,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _confirmLeave();
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('New problem'),
+          title: Text(_isNew ? 'New problem' : _details!.name),
           actions: [
+            if (!_isNew)
+              TextButton(
+                onPressed: _editDetails,
+                child: const Text('Edit details'),
+              ),
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilledButton(
