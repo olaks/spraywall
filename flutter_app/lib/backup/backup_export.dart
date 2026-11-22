@@ -106,9 +106,7 @@ Map<String, Object?> backupJson(BackupRows rows, DateTime exportedAt) {
 /// The file a backup is saved as: `spraywall-2026-11-22.zip`, or with the
 /// wall's name for one wall, kept to characters every file system takes.
 String backupFileName(DateTime now, {String? wallName}) {
-  final wall = wallName == null
-      ? ''
-      : '-${wallName.trim().replaceAll(RegExp(r'[^\p{L}\p{N}_-]+', unicode: true), '_')}';
+  final wall = wallName == null ? '' : '-${fileSafe(wallName)}';
   return 'spraywall$wall-${dateStrFrom(now)}.zip';
 }
 

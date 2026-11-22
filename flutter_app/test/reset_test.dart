@@ -93,8 +93,13 @@ void main() {
       await tester.tap(find.text('Arête'));
       await tester.pumpAndSettle();
       expect(find.text('6B'), findsOneWidget, reason: 'the problem view');
-      expect(find.byTooltip('Problem menu'), findsNothing,
+      await tester.tap(find.byTooltip('Problem menu'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PopupMenuItem<void>), findsOneWidget,
           reason: 'view only: no edit, retire or delete');
+      expect(find.text('Share'), findsOneWidget);
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
 
       await tester.pageBack();
       await tester.pumpAndSettle();

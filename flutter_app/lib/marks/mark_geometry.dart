@@ -30,6 +30,14 @@ const roleColors = {
   Role.finish: Color(0xFFFF1744),
 };
 
+/// A role's name on screen and in a share image's legend.
+String roleLabel(Role r) => switch (r) {
+      Role.start  => 'Start',
+      Role.hand   => 'Hand',
+      Role.foot   => 'Foot',
+      Role.finish => 'Finish',
+    };
+
 /// A mark's centre in photo pixels.
 Offset centrePx(double cx, double cy, Size photo) =>
     Offset(cx * photo.width, cy * photo.height);

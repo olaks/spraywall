@@ -31,8 +31,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _busy = true);
     try {
       final bytes = await exportBackup(ref.read(dbProvider), now: now);
-      final sent  = await ref.read(shareFileProvider)(
-          bytes, backupFileName(now), 'application/zip');
+      final sent  = await ref.read(shareFilesProvider)(
+          [(bytes: bytes, name: backupFileName(now))], 'application/zip');
       // Backing out of the save dialog or the share sheet is no backup.
       if (!sent) return;
       await ref.read(backupProvider.notifier).recordBackup(now);

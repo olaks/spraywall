@@ -79,10 +79,11 @@ class WallScreen extends ConsumerWidget {
   Future<void> _exportWall(WidgetRef ref, ScaffoldMessengerState messenger,
       AppDatabase db, Wall wall) async {
     final now   = ref.read(clockProvider)();
-    final share = ref.read(shareFileProvider);
+    final share = ref.read(shareFilesProvider);
     try {
       final bytes = await exportBackup(db, wallId: wall.id, now: now);
-      if (await share(bytes, backupFileName(now, wallName: wall.name),
+      if (await share(
+          [(bytes: bytes, name: backupFileName(now, wallName: wall.name))],
           'application/zip')) {
         messenger.showSnackBar(
             SnackBar(content: Text('Exported "${wall.name}"')));

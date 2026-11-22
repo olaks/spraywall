@@ -55,6 +55,8 @@ Manual checklist (spec: Testing Decisions):
       a download on the web; the .zip opens and holds backup.json + photos/
   [ ] Import that .zip on another platform: the summary adds everything,
       photos and thumbnails show; importing it again adds nothing
+  [ ] Share a problem on two photos: two JPEGs, marks and caption readable
+      at phone size (share sheet / a folder on Linux / two downloads)
 CHECKLIST
 
 echo "Building release APK..."

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,8 +7,11 @@ import '../../marks/mark_editor.dart';
 import '../../marks/mark_layer.dart';
 import '../../marks/opening_photo.dart';
 import '../../providers/app_providers.dart';
+import '../../share/share_problem.dart';
+import '../../utils/share_file.dart';
 import '../../utils/undo_snackbar.dart';
 import '../../widgets/photo_strip.dart';
+import '../photos/photos_screen.dart' show photoTitle;
 import '../../widgets/wide.dart';
 import '../../widgets/zoomable_photo.dart';
 import '../not_found_screen.dart';
@@ -26,6 +30,7 @@ class ProblemViewScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final wall    = ref.watch(wallProvider(wallId));
     final problem = ref.watch(problemProvider(problemId));
     final marks   = ref.watch(problemMarksProvider(problemId));
     final p       = problem.value;
@@ -33,30 +38,31 @@ class ProblemViewScreen extends ConsumerWidget {
     final l       = layout?.value;
     final photos  = l == null ? null : ref.watch(photosProvider(l.id));
 
-    if (problem.isLoading || marks.isLoading ||
+    if (wall.isLoading || problem.isLoading || marks.isLoading ||
         (layout?.isLoading ?? false) || (photos?.isLoading ?? false)) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (p == null || l == null || l.wallId != wallId) {
+    final w = wall.value;
+    if (w == null || p == null || l == null || l.wallId != wallId) {
       return const NotFoundScreen();
     }
     return _ProblemView(
-        wallId: wallId, problem: p, marks: marks.value!, photos: photos!.value!,
+        wall: w, problem: p, marks: marks.value!, photos: photos!.value!,
         archived: l.endedOn != null);
   }
 }
 
 class _ProblemView extends ConsumerStatefulWidget {
-  final String          wallId;
+  final Wall            wall;
   final Problem         problem;
   final List<Mark>      marks;
   final List<WallPhoto> photos;
 
-  /// On an archived layout: view only, no menu at all.
+  /// On an archived layout: view only, so the menu holds only Share.
   final bool            archived;
 
   const _ProblemView({
-    required this.wallId,
+    required this.wall,
     required this.problem,
     required this.marks,
     required this.photos,
@@ -82,7 +88,7 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
 
   Future<void> _delete() async {
     final p      = widget.problem;
-    final wallId = widget.wallId;
+    final wallId = widget.wall.id;
     // Captured up front: the undo is tapped on the list, after this screen
     // has gone.
     final db        = ref.read(dbProvider);
@@ -105,13 +111,65 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
         onUndo:  () => db.unretireProblem(p.id));
   }
 
+  /// One JPEG per photo carrying this problem's marks, at the photo's own
+  /// size with a caption bar, handed to the share sheet, a save dialog or
+  /// downloads. Images only: nothing on the other side can import them.
+  Future<void> _share() async {
+    final p         = widget.problem;
+    final db        = ref.read(dbProvider);
+    final encode    = ref.read(shareEncoderProvider);
+    final share     = ref.read(shareFilesProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final photos    = photosToShare(widget.photos, widget.marks);
+    final caption   = shareCaption(
+        name: p.name, grade: p.grade, wall: widget.wall.name);
+    final progress  = ValueNotifier('Preparing the images');
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _BusyDialog(progress),
+    );
+
+    final files = <SharedFile>[];
+    Object? failure;
+    try {
+      for (final (i, photo) in photos.indexed) {
+        progress.value = photos.length == 1
+            ? 'Preparing the image'
+            : 'Preparing image ${i + 1} of ${photos.length}';
+        final image = await renderShareImage(
+          photo:   (await db.photoImage(photo.id))!.data,
+          marks:   [for (final m in widget.marks) if (m.photoId == photo.id) m],
+          caption: caption,
+        );
+        files.add((
+          bytes: await encode(image),
+          name:  shareImageName(
+              p.name, photoTitle(photo, widget.photos.indexOf(photo)),
+              several: photos.length > 1),
+        ));
+      }
+    } catch (e) {
+      failure = e;
+    } finally {
+      navigator.pop();
+      progress.dispose();
+    }
+    if (failure != null) {
+      messenger.showSnackBar(SnackBar(content: Text("Couldn't share: $failure")));
+      return;
+    }
+    await share(files, 'image/jpeg');
+  }
+
   @override
   Widget build(BuildContext context) {
     final p     = widget.problem;
     final ms    = widget.marks;
     // A picked photo deleted meanwhile falls back to the opening one.
     final photo = openingPhoto(widget.photos, ms, shown: _picked);
-    final edit  = '/walls/${widget.wallId}/problems/${p.id}/edit'
+    final edit  = '/walls/${widget.wall.id}/problems/${p.id}/edit'
         '${photo == null ? '' : '?photo=${photo.id}'}';
 
     return Scaffold(
@@ -127,29 +185,38 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
           ],
         ),
         actions: [
-          // A retired problem keeps its record as it was: no Edit.
-          if (!widget.archived) PopupMenuButton<void>(
+          // Share goes everywhere. A retired problem keeps its record as it
+          // was (no Edit); an archived one is view only.
+          PopupMenuButton<void>(
             tooltip: 'Problem menu',
             itemBuilder: (_) => [
-              if (p.retiredOn == null) ...[
+              if (!widget.archived && p.retiredOn == null)
                 PopupMenuItem(
                   onTap: () => context.go(edit),
                   child: const Text('Edit'),
                 ),
+              if (widget.marks.isNotEmpty)
                 PopupMenuItem(
-                  onTap: _retire,
-                  child: const Text('Retire'),
+                  onTap: _share,
+                  child: const Text('Share'),
                 ),
-              ] else
+              if (!widget.archived) ...[
+                if (p.retiredOn == null)
+                  PopupMenuItem(
+                    onTap: _retire,
+                    child: const Text('Retire'),
+                  )
+                else
+                  PopupMenuItem(
+                    onTap: () =>
+                        ref.read(dbProvider).unretireProblem(p.id),
+                    child: const Text('Un-retire'),
+                  ),
                 PopupMenuItem(
-                  onTap: () =>
-                      ref.read(dbProvider).unretireProblem(p.id),
-                  child: const Text('Un-retire'),
+                  onTap: _delete,
+                  child: const Text('Delete'),
                 ),
-              PopupMenuItem(
-                onTap: _delete,
-                child: const Text('Delete'),
-              ),
+              ],
             ],
           ),
         ],
@@ -201,6 +268,31 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
       }),
     );
   }
+}
+
+/// What a slow job is doing; it can't be dismissed, and closes itself.
+class _BusyDialog extends StatelessWidget {
+  final ValueListenable<String> step;
+  const _BusyDialog(this.step);
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(children: [
+            const SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 3)),
+            const SizedBox(width: 20),
+            Expanded(
+              child: ValueListenableBuilder<String>(
+                valueListenable: step,
+                builder: (context, s, _) => Text(s),
+              ),
+            ),
+          ]),
+        ),
+      );
 }
 
 /// A wide window's right-hand panel: the dates and the description, always

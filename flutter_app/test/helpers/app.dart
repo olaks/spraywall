@@ -13,6 +13,7 @@ import 'package:spraywall/photos/photo_source.dart';
 import 'package:spraywall/providers/app_providers.dart';
 import 'package:spraywall/providers/backup_provider.dart';
 import 'package:spraywall/providers/theme_provider.dart';
+import 'package:spraywall/share/share_problem.dart';
 import 'package:spraywall/utils/pick_binary_file.dart';
 import 'package:spraywall/utils/share_file.dart';
 
@@ -46,14 +47,18 @@ class FakePhotoSource implements PhotoSource {
   }
 }
 
-/// Stands in for the share sheet, save dialog or download: keeps what it
-/// was handed, and says it went somewhere unless [backOut] is set.
+/// Stands in for the share sheet, save dialog or download: keeps every file
+/// it was handed, and says they went somewhere unless [backOut] is set.
 class FakeShare {
   final files = <({Uint8List bytes, String name, String mimeType})>[];
+  var   calls = 0;
   bool backOut = false;
 
-  Future<bool> call(Uint8List bytes, String name, String mimeType) async {
-    files.add((bytes: bytes, name: name, mimeType: mimeType));
+  Future<bool> call(List<SharedFile> handed, String mimeType) async {
+    calls++;
+    files.addAll([
+      for (final f in handed) (bytes: f.bytes, name: f.name, mimeType: mimeType),
+    ]);
     return !backOut;
   }
 }
@@ -69,8 +74,8 @@ const phone = Size(400, 800);
 /// coming back days later would. [pickedFile] is what the file picker hands
 /// back (null: the user backed out); [thumbMaker] replaces the inline
 /// thumbnail maker, to hold an import part-way.
-/// Photo import, reading a backup and making thumbnails run inline: an
-/// isolate never finishes under fake time.
+/// Photo import, reading a backup, making thumbnails and encoding share
+/// images run inline: an isolate never finishes under fake time.
 Future<void> pumpApp(
   WidgetTester tester,
   AppDatabase  db, {
@@ -94,10 +99,11 @@ Future<void> pumpApp(
       themeIndexProvider.overrideWith(() => ThemeNotifier(0, prefs)),
       photoSourceProvider.overrideWithValue(photos ?? FakePhotoSource()),
       photoImporterProvider.overrideWithValue((bytes) async => importPhoto(bytes)),
-      shareFileProvider.overrideWithValue((share ?? FakeShare()).call),
+      shareFilesProvider.overrideWithValue((share ?? FakeShare()).call),
       pickBinaryFileProvider.overrideWithValue(
           ({required extension}) async => pickedFile),
       backupParserProvider.overrideWithValue((bytes) async => parseBackup(bytes)),
+      shareEncoderProvider.overrideWithValue((image) async => encodeShareJpeg(image)),
       thumbMakerProvider.overrideWithValue(
           thumbMaker ?? (data) async => makeThumb(data)),
       if (clock != null) clockProvider.overrideWithValue(clock),

@@ -79,13 +79,13 @@ void main() {
       'with a badge, un-retire restores it', (tester) async {
     await pumpApp(tester, db);
     await goTo(tester, '/walls/$wall/problems/$arete');
-    expect(await menuItems(tester), ['Edit', 'Retire', 'Delete']);
+    expect(await menuItems(tester), ['Edit', 'Share', 'Retire', 'Delete']);
 
     await menu(tester, 'Retire');
     expect(find.text('6B · Retired ${dateStrFrom(DateTime.now())}'),
         findsOneWidget);
-    expect(await menuItems(tester), ['Un-retire', 'Delete'],
-        reason: 'read-only apart from Un-retire and Delete');
+    expect(await menuItems(tester), ['Share', 'Un-retire', 'Delete'],
+        reason: 'read-only apart from Share, Un-retire and Delete');
 
     await goTo(tester, '/walls/$wall');
     expect(find.text('Arête'), findsNothing);
@@ -103,7 +103,7 @@ void main() {
     await tester.pumpAndSettle();
     await menu(tester, 'Un-retire');
     expect(find.text('6B'), findsOneWidget);
-    expect(await menuItems(tester), ['Edit', 'Retire', 'Delete']);
+    expect(await menuItems(tester), ['Edit', 'Share', 'Retire', 'Delete']);
 
     await goTo(tester, '/walls/$wall');
     await tester.tap(find.text('Show retired'));   // off again

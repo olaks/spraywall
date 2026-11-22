@@ -397,13 +397,6 @@ class _Palette extends StatelessWidget {
   /// The side bar's width: room for the widest chip, "Finish".
   static const width = 160.0;
 
-  static String _label(Role r) => switch (r) {
-        Role.start  => 'Start',
-        Role.hand   => 'Hand',
-        Role.foot   => 'Foot',
-        Role.finish => 'Finish',
-      };
-
   @override
   Widget build(BuildContext context) {
     final chips = [
@@ -417,7 +410,7 @@ class _Palette extends StatelessWidget {
               border: Border.all(color: roleColors[r]!, width: 3),
             ),
           ),
-          label:      Text(_label(r)),
+          label:      Text(roleLabel(r)),
           selected:   role == r,
           onSelected: (_) => onRole(r),
         ),

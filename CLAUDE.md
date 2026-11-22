@@ -69,8 +69,10 @@ phone window (the test default, 800×600, would be a wide window); pass
 sheet / save dialog / download, takes a `clock:` for the backup reminder,
 and with `keepPrefs: true` reopens the app over what the last run stored
 (how a test lets days pass). `pickedFile:` is what the file picker returns;
-reading a backup and making thumbnails run inline (a `thumbMaker:` can hold
-an import part-way).
+reading a backup, making thumbnails and encoding share images run inline (a
+`thumbMaker:` can hold an import part-way). Rendering a share image draws in
+the engine (`dart:ui`), so it needs real time: `runAsync`, or alternate
+`runAsync` gaps with pumps until the fake share has been called.
 
 Widget tests run in fake time, where a drift stream (`watch…().first`) never
 completes: read streams inside `tester.runAsync` (one-shot queries and writes
