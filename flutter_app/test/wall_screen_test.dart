@@ -38,10 +38,13 @@ void main() {
     await goTo(tester, '/walls/$wall');
   }
 
-  /// Problem names, top to bottom.
+  /// Problem names, top to bottom: each title's first text (a retired
+  /// problem's badge comes after it).
   List<String> rows(WidgetTester tester) => [
         for (final tile in tester.widgetList<ListTile>(find.byType(ListTile)))
-          (tile.title! as Text).data!,
+          tester.widget<Text>(find.descendant(
+              of:       find.byWidget(tile.title!),
+              matching: find.byType(Text)).first).data!,
       ];
 
   Future<void> search(WidgetTester tester, String text) async {

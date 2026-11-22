@@ -94,6 +94,16 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
         onUndo:  () => db.restoreProblem(deleted));
   }
 
+  Future<void> _retire() async {
+    final p         = widget.problem;
+    final db        = ref.read(dbProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    await db.retireProblem(p.id);
+    showUndoSnackBar(messenger,
+        message: 'Retired "${p.name}"',
+        onUndo:  () => db.unretireProblem(p.id));
+  }
+
   @override
   Widget build(BuildContext context) {
     final p     = widget.problem;
@@ -109,18 +119,32 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(p.grade ?? 'Ungraded',
-                style: Theme.of(context).textTheme.bodySmall),
+            Text([
+              p.grade ?? 'Ungraded',
+              if (p.retiredOn != null) 'Retired ${p.retiredOn}',
+            ].join(' · '), style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
         actions: [
+          // A retired problem keeps its record as it was: no Edit.
           if (!widget.archived) PopupMenuButton<void>(
             tooltip: 'Problem menu',
             itemBuilder: (_) => [
-              PopupMenuItem(
-                onTap: () => context.go(edit),
-                child: const Text('Edit'),
-              ),
+              if (p.retiredOn == null) ...[
+                PopupMenuItem(
+                  onTap: () => context.go(edit),
+                  child: const Text('Edit'),
+                ),
+                PopupMenuItem(
+                  onTap: _retire,
+                  child: const Text('Retire'),
+                ),
+              ] else
+                PopupMenuItem(
+                  onTap: () =>
+                      ref.read(dbProvider).unretireProblem(p.id),
+                  child: const Text('Un-retire'),
+                ),
               PopupMenuItem(
                 onTap: _delete,
                 child: const Text('Delete'),

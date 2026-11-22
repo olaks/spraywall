@@ -205,12 +205,20 @@ class _ProblemList extends StatelessWidget {
       Expanded(
         child: shown.isEmpty
             ? Center(
+                // With no filters on, only hidden retired problems are left.
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Text('No problems match'),
-                  TextButton(
-                    onPressed: () => onQuery(query.cleared()),
-                    child: const Text('Clear filters'),
-                  ),
+                  Text(query.filters
+                      ? 'No problems match'
+                      : 'Every problem here is retired'),
+                  query.filters
+                      ? TextButton(
+                          onPressed: () => onQuery(query.cleared()),
+                          child: const Text('Clear filters'),
+                        )
+                      : TextButton(
+                          onPressed: () => onQuery(query.withShowRetired(true)),
+                          child: const Text('Show retired'),
+                        ),
                 ]),
               )
             : ListView(
@@ -245,8 +253,9 @@ class _ProblemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final photo = firstMarkedPhoto(photos, marks);
-    return ListTile(
+    final photo   = firstMarkedPhoto(photos, marks);
+    final retired = problem.retiredOn != null;
+    final row = ListTile(
       key:      ValueKey('problem-${problem.id}'),
       onTap:    () => context.go('$basePath/problems/${problem.id}'),
       leading:  SizedBox(
@@ -258,16 +267,42 @@ class _ProblemRow extends StatelessWidget {
                   if (m.photoId == photo.id) EditMark.fromMark(m),
               ]),
       ),
-      title:    Text(problem.name),
+      title:    Row(children: [
+        Flexible(child: Text(problem.name, overflow: TextOverflow.ellipsis)),
+        if (retired) ...[const SizedBox(width: 8), const _RetiredBadge()],
+      ]),
       subtitle: Text('Set ${problem.setOn}'),
       trailing: Text(problem.grade ?? '–',
           semanticsLabel: problem.grade ?? 'Ungraded',
           style: Theme.of(context).textTheme.titleMedium),
     );
+    // Greyed, so what's climbable stands out.
+    return retired ? Opacity(opacity: 0.5, child: row) : row;
   }
 }
 
-/// Name search, the grade range and the sort, above the list.
+/// The small "Retired" label on a retired problem's row.
+class _RetiredBadge extends StatelessWidget {
+  const _RetiredBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border:       Border.all(color: theme.colorScheme.outline),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        child: Text('Retired', style: theme.textTheme.labelSmall),
+      ),
+    );
+  }
+}
+
+/// Name search, the grade range, "Show retired" and the sort, above the
+/// list.
 class _FilterBar extends StatefulWidget {
   final List<String>               scale;
   final ProblemQuery               query;
@@ -345,25 +380,39 @@ class _FilterBarState extends State<_FilterBar> {
           onChanged: (v) => widget.onQuery(q.withName(v)),
         ),
         const SizedBox(height: 8),
-        Row(children: [
-          FilterChip(
-            avatar:     const Icon(Icons.tune, size: 18),
-            label:      Text(_gradeLabel),
-            selected:   q.hasGradeRange,
-            showCheckmark: false,
-            onSelected: (_) => _pickGrades(),
-          ),
-          const Spacer(),
-          SegmentedButton<ProblemSort>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: ProblemSort.grade,  label: Text('Grade')),
-              ButtonSegment(value: ProblemSort.newest, label: Text('Newest')),
+        // Whatever doesn't fit moves to the next line whole, rather than
+        // squeezing a label on a narrow phone.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing:            8,
+            runSpacing:         4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilterChip(
+                avatar:     const Icon(Icons.tune, size: 18),
+                label:      Text(_gradeLabel),
+                selected:   q.hasGradeRange,
+                showCheckmark: false,
+                onSelected: (_) => _pickGrades(),
+              ),
+              FilterChip(
+                label:      const Text('Show retired'),
+                selected:   q.showRetired,
+                onSelected: (v) => widget.onQuery(q.withShowRetired(v)),
+              ),
+              SegmentedButton<ProblemSort>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: ProblemSort.grade,  label: Text('Grade')),
+                  ButtonSegment(value: ProblemSort.newest, label: Text('Newest')),
+                ],
+                selected: {q.sort},
+                onSelectionChanged: (s) => widget.onQuery(q.withSort(s.single)),
+              ),
             ],
-            selected: {q.sort},
-            onSelectionChanged: (s) => widget.onQuery(q.withSort(s.single)),
           ),
-        ]),
+        ),
       ]),
     );
   }

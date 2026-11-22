@@ -51,9 +51,10 @@ class ProblemEditorScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final w = wall.value;
-    // An archived layout's problems are view-only.
+    // An archived layout's problems, and retired ones, are view-only.
     if (w == null || l == null || l.wallId != w.id || l.endedOn != null ||
-        (id != null && problem?.value == null)) {
+        (id != null && problem?.value == null) ||
+        problem?.value?.retiredOn != null) {
       return const NotFoundScreen();
     }
     if (photos!.value!.isEmpty) {

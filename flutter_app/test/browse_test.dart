@@ -70,11 +70,35 @@ void main() {
       expect(names(const ProblemQuery(minGrade: '6B', name: 'u')), ['Bulge']);
     });
 
-    test('clearing keeps the sort', () {
-      const q = ProblemQuery(
-          minGrade: '6B', name: 'x', sort: ProblemSort.newest);
-      expect(q.cleared(), const ProblemQuery(sort: ProblemSort.newest));
+    test('clearing keeps the sort and "Show retired"', () {
+      const q = ProblemQuery(minGrade: '6B', name: 'x',
+          sort: ProblemSort.newest, showRetired: true);
+      expect(q.cleared(), const ProblemQuery(
+          sort: ProblemSort.newest, showRetired: true));
       expect(q.cleared().filters, isFalse);
+    });
+  });
+
+  group('retired', () {
+    final list = [
+      ...problems,
+      Problem(id: newId(), layoutId: 'l', name: 'Gone', grade: '6B',
+          description: '', setOn: '2026-09-01', retiredOn: '2026-11-01'),
+    ];
+    List<String> shown(ProblemQuery q) =>
+        browse(list, fontGrades, q).map((p) => p.name).toList();
+
+    test('hidden by default', () {
+      expect(shown(const ProblemQuery()), isNot(contains('Gone')));
+    });
+
+    test('"Show retired" shows them among the others, filters still apply',
+        () {
+      const on = ProblemQuery(showRetired: true);
+      expect(shown(on), ['Kicker', 'Bulge', 'crimps', 'Gone', 'Arête',
+                         'Project']);
+      expect(shown(on.withName('o')), ['Gone', 'Project']);
+      expect(shown(on.withGrades('7A', null)), ['Arête']);
     });
   });
 

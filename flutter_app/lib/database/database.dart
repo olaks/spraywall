@@ -671,6 +671,28 @@ class AppDatabase extends _$AppDatabase {
         await batch((b) => b.insertAll(marks, d.marks));
       });
 
+  /// Takes a problem out of use, usually because a hold moved: it stays,
+  /// hidden from the list unless "Show retired" is on. Only on the current
+  /// layout: an archived one is read-only. Throws [StateError] otherwise.
+  Future<void> retireProblem(String id, {DateTime? today}) =>
+      _setRetired(id, dateStrFrom(today ?? DateTime.now()));
+
+  /// Puts a retired problem back in use.
+  Future<void> unretireProblem(String id) => _setRetired(id, null);
+
+  Future<void> _setRetired(String id, String? on) => transaction(() async {
+        final problem = await (select(problems)..where((p) => p.id.equals(id)))
+            .getSingle();
+        final layout  = await (select(layouts)
+              ..where((l) => l.id.equals(problem.layoutId)))
+            .getSingle();
+        if (layout.endedOn != null) {
+          throw StateError("An archived layout's problems are read-only");
+        }
+        await (update(problems)..where((p) => p.id.equals(id)))
+            .write(ProblemsCompanion(retiredOn: Value(on)));
+      });
+
   /// Throws as [createProblem] documents, unless the problem is fine to
   /// write into [layoutId].
   Future<void> _checkProblem(

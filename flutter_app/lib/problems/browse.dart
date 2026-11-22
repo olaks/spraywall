@@ -25,40 +25,59 @@ class ProblemQuery {
   final String      name;
   final ProblemSort sort;
 
+  /// Retired problems are hidden unless this is on. It widens the list
+  /// rather than narrowing it, so it is no filter: clearing keeps it.
+  final bool        showRetired;
+
   const ProblemQuery({
     this.minGrade,
     this.maxGrade,
-    this.name = '',
-    this.sort = ProblemSort.grade,
+    this.name        = '',
+    this.sort        = ProblemSort.grade,
+    this.showRetired = false,
   });
 
   bool get hasGradeRange => minGrade != null || maxGrade != null;
   bool get filters       => hasGradeRange || name.trim().isNotEmpty;
 
+  ProblemQuery _with({
+    String?      minGrade,
+    String?      maxGrade,
+    bool         grades = false,
+    String?      name,
+    ProblemSort? sort,
+    bool?        showRetired,
+  }) =>
+      ProblemQuery(
+        minGrade:    grades ? minGrade : this.minGrade,
+        maxGrade:    grades ? maxGrade : this.maxGrade,
+        name:        name        ?? this.name,
+        sort:        sort        ?? this.sort,
+        showRetired: showRetired ?? this.showRetired,
+      );
+
   ProblemQuery withGrades(String? min, String? max) =>
-      ProblemQuery(minGrade: min, maxGrade: max, name: name, sort: sort);
+      _with(minGrade: min, maxGrade: max, grades: true);
+  ProblemQuery withName(String name)       => _with(name: name);
+  ProblemQuery withSort(ProblemSort sort)  => _with(sort: sort);
+  ProblemQuery withShowRetired(bool show)  => _with(showRetired: show);
 
-  ProblemQuery withName(String name) => ProblemQuery(
-      minGrade: minGrade, maxGrade: maxGrade, name: name, sort: sort);
-
-  ProblemQuery withSort(ProblemSort sort) => ProblemQuery(
-      minGrade: minGrade, maxGrade: maxGrade, name: name, sort: sort);
-
-  /// The same sort, with no filters.
-  ProblemQuery cleared() => ProblemQuery(sort: sort);
+  /// The same sort and "Show retired", with no filters.
+  ProblemQuery cleared() => ProblemQuery(sort: sort, showRetired: showRetired);
 
   @override
   bool operator ==(Object other) =>
       other is ProblemQuery && other.minGrade == minGrade &&
-      other.maxGrade == maxGrade && other.name == name && other.sort == sort;
+      other.maxGrade == maxGrade && other.name == name &&
+      other.sort == sort && other.showRetired == showRetired;
 
   @override
-  int get hashCode => Object.hash(minGrade, maxGrade, name, sort);
+  int get hashCode => Object.hash(minGrade, maxGrade, name, sort, showRetired);
 }
 
 /// [problems] filtered and sorted by [query], with grades ordered by their
 /// position in [scale] (easiest first). A grade not on the scale counts as
-/// ungraded.
+/// ungraded. Retired problems sort among the others.
 List<Problem> browse(
     List<Problem> problems, List<String> scale, ProblemQuery query) {
   int? rank(String? grade) {
@@ -72,6 +91,7 @@ List<Problem> browse(
   final needle = query.name.trim().toLowerCase();
 
   bool keep(Problem p) {
+    if (p.retiredOn != null && !query.showRetired) return false;
     if (needle.isNotEmpty && !p.name.toLowerCase().contains(needle)) {
       return false;
     }
