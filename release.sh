@@ -57,6 +57,8 @@ Manual checklist (spec: Testing Decisions):
       photos and thumbnails show; importing it again adds nothing
   [ ] Share a problem on two photos: two JPEGs, marks and caption readable
       at phone size (share sheet / a folder on Linux / two downloads)
+  [ ] Photos → a photo → Show problems on the sample wall: marks faint but
+      findable, a tap on a shared hold lists the right problems
 CHECKLIST
 
 echo "Building release APK..."
