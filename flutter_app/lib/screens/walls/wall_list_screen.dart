@@ -45,20 +45,42 @@ class WallListScreen extends ConsumerWidget {
         error:   (e, _) => Center(child: Text('$e')),
         data:    (list) => list.isEmpty
             ? _FirstRun(onCreate: () => _newWall(context, ref))
-            : ListView(
-                children: [
-                  for (final w in list)
-                    ListTile(
-                      title:    Text(w.name),
-                      subtitle: Text(gradeScaleLabel(w.gradeScale)),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap:    () => context.go('/walls/${w.id}'),
-                    ),
-                ],
-              ),
+            : _WallList(walls: list),
       ),
     );
   }
+}
+
+/// The walls with drag handles. Dropping one writes the whole order.
+class _WallList extends ConsumerWidget {
+  final List<Wall> walls;
+  const _WallList({required this.walls});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ReorderableListView(
+        buildDefaultDragHandles: false,
+        // Room for the FAB under the last row.
+        padding: const EdgeInsets.only(bottom: 88),
+        onReorder: (from, to) {
+          final ids = [for (final w in walls) w.id];
+          final id  = ids.removeAt(from);
+          ids.insert(to > from ? to - 1 : to, id);
+          ref.read(dbProvider).reorderWalls(ids);
+        },
+        children: [
+          for (final (i, w) in walls.indexed)
+            ListTile(
+              key:      ValueKey(w.id),
+              title:    Text(w.name),
+              subtitle: Text(gradeScaleLabel(w.gradeScale)),
+              trailing: ReorderableDragStartListener(
+                index: i,
+                child: const Icon(Icons.drag_handle),
+              ),
+              onTap:    () => context.go('/walls/${w.id}'),
+            ),
+        ],
+      );
 }
 
 String gradeScaleLabel(GradeScale s) => switch (s) {

@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -53,6 +54,99 @@ void main() {
 
     expect(find.text('A wall called "HOME WALL" already exists'),
         findsOneWidget);
+    await teardownTree(tester);
+  });
+
+  Future<void> openEditWall(WidgetTester tester, String name) async {
+    await tester.tap(find.text(name));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Wall menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit wall'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('deleting a wall lands on the list, and undo brings it back',
+      (tester) async {
+    await seedWall(db, name: 'Home wall');
+    await seedWall(db, name: 'Garage');
+    await pumpApp(tester, db);
+
+    await openEditWall(tester, 'Home wall');
+    await tester.tap(find.text('Delete wall'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Walls'), findsOneWidget, reason: 'back on the list');
+    expect(find.text('Garage'), findsOneWidget);
+    expect(find.text('Home wall'), findsNothing);
+    expect(find.text('Deleted "Home wall"'), findsOneWidget);
+
+    await tester.tap(find.text('UNDO'));
+    await tester.pumpAndSettle();
+    expect(find.text('Home wall'), findsOneWidget);
+    final walls = await tester.runAsync(() => db.watchWalls().first);
+    expect(walls!.map((w) => w.name), ['Home wall', 'Garage'],
+        reason: 'back in its old place');
+
+    await teardownTree(tester);
+  });
+
+  testWidgets('dragging a wall by its handle reorders the list',
+      (tester) async {
+    for (final name in ['A', 'B', 'C']) {
+      await seedWall(db, name: name);
+    }
+    await pumpApp(tester, db);
+
+    // Drag A's handle down past the bottom of C, in steps as a finger would.
+    final start   = tester.getCenter(find.byIcon(Icons.drag_handle).first);
+    final target  = tester.getBottomLeft(find.widgetWithText(ListTile, 'C')).dy + 8;
+    final gesture = await tester.startGesture(start);
+    for (var i = 1; i <= 10; i++) {
+      await gesture.moveTo(Offset(start.dx, start.dy + (target - start.dy) * i / 10));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    final walls = await tester.runAsync(() => db.watchWalls().first);
+    expect(walls!.map((w) => w.name), ['B', 'C', 'A']);
+    await teardownTree(tester);
+  });
+
+  testWidgets('a renamed wall shows its new name', (tester) async {
+    await seedWall(db, name: 'Home wall');
+    await pumpApp(tester, db);
+
+    await openEditWall(tester, 'Home wall');
+    await tester.enterText(find.byType(TextField), 'Cellar');
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cellar'), findsOneWidget);
+
+    await teardownTree(tester);
+  });
+
+  testWidgets('the grade scale is locked once a problem has a grade',
+      (tester) async {
+    final id     = await seedWall(db, name: 'Home wall');
+    final layout = await tester.runAsync(() => db.watchCurrentLayout(id).first);
+    await db.into(db.problems).insert(ProblemsCompanion.insert(
+        layoutId: layout!.id, name: 'Arête', grade: const Value('6B'),
+        setOn: '2026-11-22'));
+    await pumpApp(tester, db);
+
+    await openEditWall(tester, 'Home wall');
+    expect(find.textContaining('Locked'), findsOneWidget);
+    await tester.tap(find.text('V'));
+    await tester.pump();
+    final segmented = tester.widget<SegmentedButton<GradeScale>>(
+        find.byType(SegmentedButton<GradeScale>));
+    expect(segmented.selected, {GradeScale.font});
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
     await teardownTree(tester);
   });
 

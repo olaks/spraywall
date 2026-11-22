@@ -67,7 +67,9 @@ Widget tests run in fake time, where a drift stream (`watch…().first`) never
 completes: read streams inside `tester.runAsync` (one-shot queries and writes
 complete without it), and advance the clock a millisecond before the tree is
 torn down so drift's stream-close timer can run (`teardownTree`). A button
-enabled by `setState` needs a `pump()` before it can be tapped.
+enabled by `setState` needs a `pump()` before it can be tapped. A reorder
+drag moves in steps (`moveTo` plus `pump` in a loop) to a point measured from
+the target row; one long jump lands short.
 
 ## Architecture
 
