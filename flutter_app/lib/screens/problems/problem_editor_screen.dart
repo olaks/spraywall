@@ -51,7 +51,8 @@ class ProblemEditorScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final w = wall.value;
-    if (w == null || l == null || l.wallId != w.id ||
+    // An archived layout's problems are view-only.
+    if (w == null || l == null || l.wallId != w.id || l.endedOn != null ||
         (id != null && problem?.value == null)) {
       return const NotFoundScreen();
     }

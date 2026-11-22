@@ -47,6 +47,30 @@ class DeletedWall {
   });
 }
 
+/// Everything [AppDatabase.deleteLayout] removed from an archived layout, so
+/// [AppDatabase.restoreLayout] can put it back with the same ids.
+class DeletedLayout {
+  final Layout               layout;
+  final List<WallPhoto>      photos;
+  final List<WallPhotoImage> images;
+  final List<Problem>        problems;
+  final List<Mark>           marks;
+
+  const DeletedLayout({
+    required this.layout,
+    required this.photos,
+    required this.images,
+    required this.problems,
+    required this.marks,
+  });
+}
+
+/// What a reset did, for [AppDatabase.undoReset].
+typedef LayoutReset = ({String archivedId, String newId});
+
+/// An archived layout with what it holds, for the Past layouts list.
+typedef PastLayout = ({Layout layout, int problems, int photos});
+
 /// Thrown when a problem would share its name with another in its layout,
 /// ignoring case (retired problems included).
 class ProblemNameTaken implements Exception {
@@ -255,36 +279,45 @@ class AppDatabase extends _$AppDatabase {
             .getSingle();
         final ls = await (select(layouts)..where((l) => l.wallId.equals(id)))
             .get();
-        final layoutIds = [for (final l in ls) l.id];
-        final ps = await (select(wallPhotos)
-              ..where((p) => p.layoutId.isIn(layoutIds)))
-            .get();
-        final photoIds = [for (final p in ps) p.id];
-        final images = await (select(wallPhotoBytes)
-              ..where((b) => b.photoId.isIn(photoIds)))
-            .get();
-        final probs = await (select(problems)
-              ..where((p) => p.layoutId.isIn(layoutIds)))
-            .get();
-        final problemIds = [for (final p in probs) p.id];
-        final ms = await (select(marks)
-              ..where((m) => m.problemId.isIn(problemIds)))
-            .get();
-
-        // Children first: foreign keys are on and nothing cascades.
-        await (delete(marks)..where((m) => m.problemId.isIn(problemIds))).go();
-        await (delete(problems)..where((p) => p.id.isIn(problemIds))).go();
-        await (delete(wallPhotoBytes)..where((b) => b.photoId.isIn(photoIds)))
-            .go();
-        await (delete(wallPhotos)..where((p) => p.id.isIn(photoIds))).go();
-        await (delete(layouts)..where((l) => l.id.isIn(layoutIds))).go();
+        final tree = await _takeLayouts([for (final l in ls) l.id]);
         await (delete(walls)..where((w) => w.id.equals(id))).go();
-
         return DeletedWall(
-          wall: wall, layouts: ls, photos: ps, images: images,
-          problems: probs, marks: ms,
+          wall: wall, layouts: ls, photos: tree.photos, images: tree.images,
+          problems: tree.problems, marks: tree.marks,
         );
       });
+
+  /// Reads, then deletes, the layouts [layoutIds] and everything under them,
+  /// children first: foreign keys are on and nothing cascades.
+  Future<({
+    List<WallPhoto>      photos,
+    List<WallPhotoImage> images,
+    List<Problem>        problems,
+    List<Mark>           marks,
+  })> _takeLayouts(List<String> layoutIds) async {
+    final ps = await (select(wallPhotos)
+          ..where((p) => p.layoutId.isIn(layoutIds)))
+        .get();
+    final photoIds = [for (final p in ps) p.id];
+    final images = await (select(wallPhotoBytes)
+          ..where((b) => b.photoId.isIn(photoIds)))
+        .get();
+    final probs = await (select(problems)
+          ..where((p) => p.layoutId.isIn(layoutIds)))
+        .get();
+    final problemIds = [for (final p in probs) p.id];
+    final ms = await (select(marks)
+          ..where((m) => m.problemId.isIn(problemIds))
+          ..orderBy([(_) => OrderingTerm(expression: _rowid)]))
+        .get();
+
+    await (delete(marks)..where((m) => m.problemId.isIn(problemIds))).go();
+    await (delete(problems)..where((p) => p.id.isIn(problemIds))).go();
+    await (delete(wallPhotoBytes)..where((b) => b.photoId.isIn(photoIds))).go();
+    await (delete(wallPhotos)..where((p) => p.id.isIn(photoIds))).go();
+    await (delete(layouts)..where((l) => l.id.isIn(layoutIds))).go();
+    return (photos: ps, images: images, problems: probs, marks: ms);
+  }
 
   /// Puts back what [deleteWall] removed, ids and list position included.
   /// If another wall took the name meanwhile, the restored one becomes
@@ -301,6 +334,103 @@ class AppDatabase extends _$AppDatabase {
           b.insertAll(problems,       d.problems);
           b.insertAll(marks,          d.marks);
         });
+      });
+
+  // ── Layouts ────────────────────────────────────────────────────────────
+
+  /// Archives the wall's current layout and starts an empty one on
+  /// [startedOn], named [name] (blank is no name), in one transaction. The
+  /// old layout ends on the new one's start date, so [startedOn] can't be
+  /// before the old layout started.
+  Future<LayoutReset> resetLayout(
+    String wallId, {
+    String?           name,
+    required DateTime startedOn,
+  }) =>
+      transaction(() async {
+        final current = await (select(layouts)
+              ..where((l) => l.wallId.equals(wallId) & l.endedOn.isNull()))
+            .getSingle();
+        final start = dateStrFrom(startedOn);
+        if (start.compareTo(current.startedOn) < 0) {
+          throw ArgumentError.value(start, 'startedOn',
+              'is before the current layout started (${current.startedOn})');
+        }
+        // End the old one first: the partial unique index allows one
+        // current layout per wall at any moment.
+        await (update(layouts)..where((l) => l.id.equals(current.id)))
+            .write(LayoutsCompanion(endedOn: Value(start)));
+        final trimmed = name?.trim() ?? '';
+        final id = newId();
+        await into(layouts).insert(LayoutsCompanion.insert(
+          id:        Value(id),
+          wallId:    wallId,
+          name:      Value(trimmed.isEmpty ? null : trimmed),
+          startedOn: start,
+        ));
+        return (archivedId: current.id, newId: id);
+      });
+
+  /// Takes back [reset]: the new layout goes and the archived one is current
+  /// again. Only while the new layout is still empty, since undo never
+  /// deletes work; returns whether it was undone.
+  Future<bool> undoReset(LayoutReset reset) => transaction(() async {
+        final fresh = await layout(reset.newId);
+        if (fresh == null || fresh.endedOn != null) return false;
+        final hasPhoto = await (select(wallPhotos)
+              ..where((p) => p.layoutId.equals(reset.newId))
+              ..limit(1))
+            .getSingleOrNull();
+        if (hasPhoto != null) return false;
+        await (delete(layouts)..where((l) => l.id.equals(reset.newId))).go();
+        await (update(layouts)..where((l) => l.id.equals(reset.archivedId)))
+            .write(const LayoutsCompanion(endedOn: Value(null)));
+        return true;
+      });
+
+  /// The wall's archived layouts, newest first, with their problem and
+  /// photo counts.
+  Stream<List<PastLayout>> watchPastLayouts(String wallId) => customSelect(
+        'SELECT l.*, '
+        '(SELECT COUNT(*) FROM problems p WHERE p.layout_id = l.id) AS n_problems, '
+        '(SELECT COUNT(*) FROM wall_photos w WHERE w.layout_id = l.id) AS n_photos '
+        'FROM layouts l '
+        'WHERE l.wall_id = ? AND l.ended_on IS NOT NULL '
+        'ORDER BY l.ended_on DESC, l.started_on DESC, l.id DESC',
+        variables: [Variable.withString(wallId)],
+        readsFrom: {layouts, problems, wallPhotos},
+      ).watch().map((rows) => [
+            for (final r in rows)
+              (
+                layout:   layouts.map(r.data),
+                problems: r.read<int>('n_problems'),
+                photos:   r.read<int>('n_photos'),
+              ),
+          ]);
+
+  /// Deletes an archived layout with its photos, their bytes, its problems
+  /// and their marks. Returns what it removed for [restoreLayout]. The
+  /// current layout can't be deleted: a wall always has one.
+  Future<DeletedLayout> deleteLayout(String id) => transaction(() async {
+        final l = (await layout(id))!;
+        if (l.endedOn == null) {
+          throw StateError("The current layout can't be deleted");
+        }
+        final tree = await _takeLayouts([id]);
+        return DeletedLayout(
+          layout: l, photos: tree.photos, images: tree.images,
+          problems: tree.problems, marks: tree.marks,
+        );
+      });
+
+  /// Puts back what [deleteLayout] removed, ids and drawing order included.
+  Future<void> restoreLayout(DeletedLayout d) => batch((b) {
+        // Parents first.
+        b.insert(layouts, d.layout);
+        b.insertAll(wallPhotos,     d.photos);
+        b.insertAll(wallPhotoBytes, d.images);
+        b.insertAll(problems,       d.problems);
+        b.insertAll(marks,          d.marks);
       });
 
   // ── Wall photos ────────────────────────────────────────────────────────

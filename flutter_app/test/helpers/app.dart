@@ -86,6 +86,20 @@ Future<void> teardownTree(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 1));
 }
 
+/// Lets drift's change notifications reach the app's streams. Under fake
+/// time some don't arrive (a reset swaps the screen onto the new layout's
+/// streams), so alternate short real-time gaps with frames. Not
+/// `pumpAndSettle`: while a stream loads, a spinning progress indicator
+/// never settles. The in-memory database answers in well under a
+/// millisecond.
+Future<void> settleDb(WidgetTester tester) async {
+  for (var i = 0; i < 10; i++) {
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
 /// Navigates the running app to [path], as a typed URL or deep link would.
 Future<void> goTo(WidgetTester tester, String path) async {
   GoRouter.of(tester.element(find.byType(Scaffold).first)).go(path);

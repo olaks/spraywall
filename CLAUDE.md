@@ -79,6 +79,10 @@ the target row; one long jump lands short. Let a snackbar slide in
 (`seedProblem` without explicit marks) goes inside `runAsync` in a widget
 test. A write from the test body after `pumpApp` doesn't reach the app's
 streams under fake time: seed what the screen should show before pumping.
+An app action whose result arrives through streams the screen hadn't
+seen before (a reset moves it onto the new layout's) needs `settleDb`, which
+alternates real-time gaps with frames; `pumpAndSettle` would leave the old
+state on screen, or spin on a progress indicator.
 
 ## Architecture
 

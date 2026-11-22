@@ -46,8 +46,9 @@ final photoThumbProvider = FutureProvider.autoDispose.family<Uint8List?, String>
 final layoutMarksProvider = StreamProvider.family<List<Mark>, String>(
     (ref, layoutId) => ref.watch(dbProvider).watchLayoutMarks(layoutId));
 
-/// The wall screen's filters and sort, per wall. In memory for the app run:
-/// they survive opening a problem and coming back, but not a restart.
+/// The wall screen's filters and sort, per layout (so an archived layout's
+/// list keeps its own). In memory for the app run: they survive opening a
+/// problem and coming back, but not a restart.
 final problemQueryProvider =
     NotifierProvider.family<ProblemQueryNotifier, ProblemQuery, String>(
         ProblemQueryNotifier.new);
@@ -60,6 +61,10 @@ class ProblemQueryNotifier extends Notifier<ProblemQuery> {
 
   void set(ProblemQuery query) => state = query;
 }
+
+/// A wall's archived layouts, newest first, with their counts.
+final pastLayoutsProvider = StreamProvider.family<List<PastLayout>, String>(
+    (ref, wallId) => ref.watch(dbProvider).watchPastLayouts(wallId));
 
 /// A layout's problems, retired ones included, by name.
 final problemsProvider = StreamProvider.family<List<Problem>, String>(

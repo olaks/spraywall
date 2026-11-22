@@ -9,6 +9,7 @@ import 'screens/photos/photos_screen.dart';
 import 'screens/problems/problem_editor_screen.dart';
 import 'screens/problems/problem_view_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/walls/past_layouts_screen.dart';
 import 'screens/walls/wall_list_screen.dart';
 import 'screens/walls/wall_screen.dart';
 import 'theme/app_theme.dart';
@@ -47,6 +48,30 @@ GoRouter buildRouter() => GoRouter(
                     problemId: state.pathParameters['problemId']!,
                     photoId:   state.uri.queryParameters['photo'],
                   ),
+                ),
+              ],
+            ),
+            GoRoute(
+              path: 'layouts',
+              builder: (_, state) =>
+                  PastLayoutsScreen(wallId: state.pathParameters['wallId']!),
+              routes: [
+                GoRoute(
+                  path: ':layoutId',
+                  builder: (_, state) => WallScreen(
+                    wallId:   state.pathParameters['wallId']!,
+                    layoutId: state.pathParameters['layoutId']!,
+                  ),
+                  routes: [
+                    // Under the archived layout, so Back returns to it.
+                    GoRoute(
+                      path: 'problems/:problemId',
+                      builder: (_, state) => ProblemViewScreen(
+                        wallId:    state.pathParameters['wallId']!,
+                        problemId: state.pathParameters['problemId']!,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

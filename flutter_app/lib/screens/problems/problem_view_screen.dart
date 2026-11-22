@@ -40,7 +40,8 @@ class ProblemViewScreen extends ConsumerWidget {
       return const NotFoundScreen();
     }
     return _ProblemView(
-        wallId: wallId, problem: p, marks: marks.value!, photos: photos!.value!);
+        wallId: wallId, problem: p, marks: marks.value!, photos: photos!.value!,
+        archived: l.endedOn != null);
   }
 }
 
@@ -49,11 +50,16 @@ class _ProblemView extends ConsumerStatefulWidget {
   final Problem         problem;
   final List<Mark>      marks;
   final List<WallPhoto> photos;
+
+  /// On an archived layout: view only, no menu at all.
+  final bool            archived;
+
   const _ProblemView({
     required this.wallId,
     required this.problem,
     required this.marks,
     required this.photos,
+    required this.archived,
   });
 
   @override
@@ -108,7 +114,7 @@ class _ProblemViewState extends ConsumerState<_ProblemView> {
           ],
         ),
         actions: [
-          PopupMenuButton<void>(
+          if (!widget.archived) PopupMenuButton<void>(
             tooltip: 'Problem menu',
             itemBuilder: (_) => [
               PopupMenuItem(

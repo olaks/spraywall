@@ -11,12 +11,41 @@ import '../../utils/undo_snackbar.dart';
 import '../../widgets/marked_thumb.dart';
 import '../not_found_screen.dart';
 import 'edit_wall_dialog.dart';
+import 'reset_dialog.dart';
 
 /// A wall's current layout: its problems, filtered and sorted, each row with
 /// its grade, set date and the first photo it is marked on.
+///
+/// Given an archived [layoutId], the same list read-only: no FAB, menu,
+/// editing or reset, and its problems open view-only under that layout.
 class WallScreen extends ConsumerWidget {
-  final String wallId;
-  const WallScreen({super.key, required this.wallId});
+  final String  wallId;
+  final String? layoutId;
+  const WallScreen({super.key, required this.wallId, this.layoutId});
+
+  bool get readOnly => layoutId != null;
+
+  Future<void> _reset(
+      BuildContext context, WidgetRef ref, Layout current, int problems) async {
+    // Captured up front, like every undo: it goes through this database.
+    final db        = ref.read(dbProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final choice = await showDialog<ResetChoice>(
+      context: context,
+      builder: (_) => ResetDialog(current: current, problems: problems),
+    );
+    if (choice == null) return;
+    final reset = await db.resetLayout(wallId,
+        name: choice.name, startedOn: choice.startedOn);
+    showUndoSnackBar(messenger,
+        message: 'Started a new layout',
+        onUndo: () async {
+          if (!await db.undoReset(reset)) {
+            messenger.showSnackBar(const SnackBar(
+                content: Text("Can't undo: the new layout has photos")));
+          }
+        });
+  }
 
   Future<void> _editWall(BuildContext context, WidgetRef ref, Wall wall) async {
     // Captured up front: the undo can be tapped after this screen is gone.
@@ -41,21 +70,32 @@ class WallScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final wall   = ref.watch(wallProvider(wallId));
-    final layout = ref.watch(currentLayoutProvider(wallId));
+    final layout = switch (layoutId) {
+      null        => ref.watch(currentLayoutProvider(wallId)),
+      final id    => ref.watch(layoutProvider(id)),
+    };
 
     if (wall.isLoading || layout.isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final w = wall.value;
     final l = layout.value;
-    if (w == null || l == null) return const NotFoundScreen();
+    // An archived URL that names the current layout (or another wall's) is
+    // not one this screen shows.
+    if (w == null || l == null || l.wallId != w.id ||
+        readOnly != (l.endedOn != null)) {
+      return const NotFoundScreen();
+    }
     final photos    = ref.watch(photosProvider(l.id)).value;
     final hasPhotos = photos?.isNotEmpty ?? false;
     final problems  = ref.watch(problemsProvider(l.id)).value;
     final marks     = ref.watch(layoutMarksProvider(l.id)).value ?? const [];
-    final query     = ref.watch(problemQueryProvider(w.id));
+    final query     = ref.watch(problemQueryProvider(l.id));
     void setQuery(ProblemQuery q) =>
-        ref.read(problemQueryProvider(w.id).notifier).set(q);
+        ref.read(problemQueryProvider(l.id).notifier).set(q);
+    final subtitle  = readOnly
+        ? '${l.name ?? 'Archived'}, ${l.startedOn} – ${l.endedOn}'
+        : l.name ?? 'Since ${l.startedOn}';
 
     return Scaffold(
       appBar: AppBar(
@@ -63,17 +103,24 @@ class WallScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(w.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(l.name ?? 'Since ${l.startedOn}',
-                style: Theme.of(context).textTheme.bodySmall),
+            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
         actions: [
-          PopupMenuButton<void>(
+          if (!readOnly) PopupMenuButton<void>(
             tooltip: 'Wall menu',
             itemBuilder: (_) => [
               PopupMenuItem(
                 onTap: () => context.go('/walls/${w.id}/photos'),
                 child: const Text('Photos'),
+              ),
+              PopupMenuItem(
+                onTap: () => _reset(context, ref, l, problems?.length ?? 0),
+                child: const Text('Reset'),
+              ),
+              PopupMenuItem(
+                onTap: () => context.go('/walls/${w.id}/layouts'),
+                child: const Text('Past layouts'),
               ),
               PopupMenuItem(
                 onTap: () => _editWall(context, ref, w),
@@ -84,7 +131,7 @@ class WallScreen extends ConsumerWidget {
         ],
       ),
       // Problems are set on photos, so the first thing a layout needs is one.
-      floatingActionButton: photos == null ? null : hasPhotos
+      floatingActionButton: photos == null || readOnly ? null : hasPhotos
           ? FloatingActionButton.extended(
               onPressed: () => context.go('/walls/${w.id}/problems/new'),
               icon:      const Icon(Icons.add),
@@ -108,6 +155,7 @@ class WallScreen extends ConsumerWidget {
           ),
         (final ps?, final list?) => _ProblemList(
             wall:     w,
+            basePath: readOnly ? '/walls/${w.id}/layouts/${l.id}' : '/walls/${w.id}',
             photos:   ps,
             problems: list,
             marks:    marks,
@@ -121,6 +169,9 @@ class WallScreen extends ConsumerWidget {
 
 class _ProblemList extends StatelessWidget {
   final Wall               wall;
+
+  /// Where problem routes hang: the wall, or an archived layout.
+  final String             basePath;
   final List<WallPhoto>    photos;
   final List<Problem>      problems;
   final List<Mark>         marks;
@@ -129,6 +180,7 @@ class _ProblemList extends StatelessWidget {
 
   const _ProblemList({
     required this.wall,
+    required this.basePath,
     required this.photos,
     required this.problems,
     required this.marks,
@@ -166,7 +218,7 @@ class _ProblemList extends StatelessWidget {
                 children: [
                   for (final p in shown)
                     _ProblemRow(
-                      wallId:  wall.id,
+                      basePath: basePath,
                       problem: p,
                       photos:  photos,
                       marks:   byProblem[p.id] ?? const [],
@@ -179,13 +231,13 @@ class _ProblemList extends StatelessWidget {
 }
 
 class _ProblemRow extends StatelessWidget {
-  final String          wallId;
+  final String          basePath;
   final Problem         problem;
   final List<WallPhoto> photos;
   final List<Mark>      marks;
 
   const _ProblemRow({
-    required this.wallId,
+    required this.basePath,
     required this.problem,
     required this.photos,
     required this.marks,
@@ -196,7 +248,7 @@ class _ProblemRow extends StatelessWidget {
     final photo = firstMarkedPhoto(photos, marks);
     return ListTile(
       key:      ValueKey('problem-${problem.id}'),
-      onTap:    () => context.go('/walls/$wallId/problems/${problem.id}'),
+      onTap:    () => context.go('$basePath/problems/${problem.id}'),
       leading:  SizedBox(
         width: 64, height: 48,
         child: photo == null
