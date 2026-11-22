@@ -1,0 +1,63 @@
+name: spraywall
+description: Set boulder problems on a spray wall — Android, Linux, Web.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Database (SQLite, works on Android/Linux/Web)
+  # Pinned to the version drift_dev 2.34.0 can verify schemas against: later
+  # drift releases changed an API its verifier calls, and drift_dev 2.34.1+
+  # needs analyzer 13 (meta 1.18), which this Flutter SDK pins lower. Lift
+  # both together once the SDK moves up.
+  drift: '>=2.18.0 <2.34.1'
+  drift_flutter: ^0.3.0
+
+  # State management
+  flutter_riverpod: ^3.3.1
+
+  # Navigation (URL-based — important for web)
+  go_router: ^17.2.0
+
+  # UUIDv7 primary keys (docs/adr/0001-uuid-v7-ids.md)
+  uuid: ^4.5.1
+
+  # Backup file picking and sharing.
+  # file_picker 12 and share_plus 13 both want win32 6. In training_logger
+  # win32 6 also forced wakelock_plus 1.6+, which breaks the APK build; this
+  # app has no wakelock_plus, but re-check the trio there before lifting these.
+  file_picker: ^11.0.0
+  share_plus: ^12.0.2
+  path_provider: ^2.1.5
+  shared_preferences: ^2.5.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.18.0
+  build_runner: ^2.4.9
+  # Raw connection used by migration tests to write a pre-upgrade database.
+  sqlite3: ^3.3.0
+  # Generates the JPEG fixtures in test/helpers. Moves to dependencies when
+  # photo import (ticket 03) uses it in the app.
+  image: ^4.5.4
+
+flutter:
+  uses-material-design: true
+
+dependency_overrides:
+  # jni arrives transitively through path_provider_android and is only used on
+  # Android, but its C sources are still compiled for the Linux desktop build,
+  # where 1.0.1+ fails on incompatible pointer types with a current compiler.
+  # Holding it at 1.0.0 keeps `flutter build linux` working.
+  jni: 1.0.0
+  # jni_flutter (also via path_provider_android) 1.1+ is generated against
+  # jni ^1.2 and fails to compile with the pin above; 1.0.3 is what
+  # training_logger's lockfile resolves to. Lift both together.
+  jni_flutter: 1.0.3

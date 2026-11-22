@@ -1,0 +1,24 @@
+# The real wall photo — it carries the wall's GPS location. Never commit it.
+sample/
+# …and the mark-editing prototype's byte-for-byte copy of it.
+.scratch/spraywall-spec/prototypes/mark_editing/assets/wall.jpg
+
+# Generated knowledge graph (regenerate with `graphify update .`)
+graphify-out/
+
+# Signing keys (never commit)
+flutter_app/android/key.properties
+flutter_app/android/app/release-keystore.jks
+
+# Build output, here and in the throwaway prototypes under .scratch/
+build/
+.dart_tool/
+.gradle/
+local.properties
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+
+# Local scratch files
+tmp/

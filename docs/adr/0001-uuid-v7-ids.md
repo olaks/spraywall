@@ -1,0 +1,3 @@
+# UUIDv7 text ids instead of auto-increment
+
+Every table's primary key is a UUIDv7 string generated on the device, not the auto-increment integer that `training_logger` (which this app copies from) uses. Ids stay the same across devices, so backup import and any later sync or community features match rows by id instead of by name. That removes the "names match ignoring case, first match wins" problem for problems that share a name on different layouts. A snapshot restore can also never collide with a row created in between. Version 7 keeps ids sortable by creation time. The cost is larger keys and indexes, which is negligible next to the photo blobs, and moving off integer ids later would mean rewriting every foreign key.

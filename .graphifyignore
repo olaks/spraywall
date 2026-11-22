@@ -1,0 +1,9 @@
+# Generated Flutter platform scaffolding in the throwaway prototypes
+**/android/
+**/linux/
+**/web/
+**/analysis_options.yaml
+# Images: launcher icons and wall photos carry no extractable knowledge
+*.png
+*.jpg
+**/assets/
