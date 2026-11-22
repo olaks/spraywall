@@ -22,3 +22,6 @@ local.properties
 
 # Local scratch files
 tmp/
+
+# Spec, research and build tickets: kept locally, not published.
+.scratch/
