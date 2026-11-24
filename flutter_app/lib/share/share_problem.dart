@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import '../database/database.dart';
 import '../marks/mark_geometry.dart';
+import '../marks/outline.dart';
 import '../utils/format_utils.dart';
 
 /// The caption bar's text: `name · grade · wall`, the grade left out for an
@@ -63,19 +64,12 @@ Future<RenderedImage> renderShareImage({
   final canvas   = Canvas(recorder);
   canvas.drawImage(image, Offset.zero, Paint());
 
-  // Rings scaled to the photo, so they read when it is shown shrunk.
+  // Strokes scaled to the photo, so they read when it is shown shrunk.
   final stroke = math.max(4.0, size.width * 0.003);
   for (final m in marks) {
-    final c = centrePx(m.cx, m.cy, size);
-    final r = radiusPx(m.r, size);
-    canvas.drawCircle(c, r, Paint()
-      ..style       = PaintingStyle.stroke
-      ..strokeWidth = stroke * 2.2
-      ..color       = const Color(0x8A000000));
-    canvas.drawCircle(c, r, Paint()
-      ..style       = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..color       = roleColors[m.role]!);
+    strokeMark(canvas,
+        markPath(m.cx, m.cy, m.r, decodeOutline(m.outline), size),
+        roleColors[m.role]!, stroke);
   }
 
   _drawCaptionBar(canvas, Rect.fromLTWH(0, size.height, size.width, bar),

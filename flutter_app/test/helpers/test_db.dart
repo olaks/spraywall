@@ -32,8 +32,10 @@ Future<String> seedPhoto(
   String?     label,
   int         width  = 40,
   int         height = 30,
+  Uint8List?  jpeg,
 }) =>
-    db.addPhoto(layoutId, importPhoto(jpegFixture(width: width, height: height)),
+    db.addPhoto(layoutId,
+        importPhoto(jpeg ?? jpegFixture(width: width, height: height)),
         label: label);
 
 /// A problem on [layoutId] through the real create. [marks] are
@@ -60,7 +62,7 @@ Future<String> seedProblem(
     marks: [
       for (final (i, (photoId, role)) in pairs.indexed)
         (id: newId(), photoId: photoId, role: role,
-         cx: (i + 1) / (pairs.length + 1), cy: 0.5, r: 0.02),
+         cx: (i + 1) / (pairs.length + 1), cy: 0.5, r: 0.02, outline: null),
     ],
   );
 }

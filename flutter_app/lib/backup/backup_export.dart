@@ -3,10 +3,11 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import '../database/database.dart';
+import '../marks/outline.dart';
 import '../utils/format_utils.dart';
 
 /// The backup format this app writes. Import refuses a newer one.
-const backupVersion = 1;
+const backupVersion = 2;
 
 /// The zip's entries: the rows, and each photo by its id.
 const backupJsonName = 'backup.json';
@@ -92,6 +93,12 @@ Map<String, Object?> backupJson(BackupRows rows, DateTime exportedAt) {
                             'cx':      m.cx,
                             'cy':      m.cy,
                             'r':       m.r,
+                            // v2: a hold's outline, x y x y …, or absent
+                            // for a circle.
+                            if (decodeOutline(m.outline) case final o?)
+                              'outline': [
+                                for (final p in o) ...[p.dx, p.dy],
+                              ],
                           },
                       ],
                     }),

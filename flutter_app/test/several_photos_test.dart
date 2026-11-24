@@ -54,7 +54,8 @@ void main() {
       .data!;
 
   MarkInput mark(String photoId, Role role) =>
-      (id: newId(), photoId: photoId, role: role, cx: 0.5, cy: 0.5, r: 0.02);
+      (id: newId(), photoId: photoId, role: role, cx: 0.5, cy: 0.5, r: 0.02,
+       outline: null);
 
   group('the editor', () {
     Future<void> openNew(WidgetTester tester) async {

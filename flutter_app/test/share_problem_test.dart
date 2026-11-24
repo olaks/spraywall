@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:spraywall/database/database.dart';
 import 'package:spraywall/marks/mark_geometry.dart';
+import 'package:spraywall/marks/outline.dart';
 import 'package:spraywall/share/share_problem.dart';
 
 import 'helpers/app.dart';
@@ -82,6 +83,35 @@ void main() {
     }
     final bar = out.getPixel(w ~/ 2, h + 2);
     expect(bar.r, lessThan(40), reason: 'the dark caption bar');
+  });
+
+  testWidgets('the render draws an outline mark as its outline, not its '
+      'circle', (tester) async {
+    const w = 800, h = 600, size = Size(800, 600);
+    // A box 200 × 100 px around (400, 300).
+    const box = [Offset(0.375, 0.4167), Offset(0.625, 0.4167),
+                 Offset(0.625, 0.5833), Offset(0.375, 0.5833)];
+    final around = enclosingCircle(box, size);
+    final held = Mark(id: newId(), problemId: 'p', photoId: 'p',
+        role: Role.hand, cx: around.cx, cy: around.cy, r: around.r,
+        outline: encodeOutline(box));
+    final jpeg = (await tester.runAsync(() async => encodeShareJpeg(
+        await renderShareImage(
+          photo:   jpegFixture(width: w, height: h),
+          marks:   [held],
+          caption: 'Pinch',
+        ))))!;
+    final out = img.decodeJpg(jpeg)!;
+    bool hand(img.Pixel p) {
+      final c = roleColors[Role.hand]!;
+      return (p.r - c.r * 255).abs() < 40 && (p.g - c.g * 255).abs() < 40 &&
+          (p.b - c.b * 255).abs() < 40;
+    }
+    expect(hand(out.getPixel(500, 300)), isTrue, reason: "the box's right edge");
+    expect(hand(out.getPixel(400, 250)), isTrue, reason: 'its top edge');
+    final circleRight = (400 + radiusPx(around.r, size)).round();
+    expect(hand(out.getPixel(circleRight, 300)), isFalse,
+        reason: 'not the circle around it');
   });
 
   group('Share in the problem view', () {

@@ -21,7 +21,7 @@ void main() {
 
   MarkInput mark(Role role, {String? onPhoto, double cx = 0.5}) => (
         id: newId(), photoId: onPhoto ?? photo, role: role,
-        cx: cx, cy: 0.5, r: 0.02,
+        cx: cx, cy: 0.5, r: 0.02, outline: null,
       );
 
   Future<String> create(String name, {String? grade, List<MarkInput>? marks}) =>
@@ -121,7 +121,7 @@ void main() {
                     description: 'Stand start', setOn: DateTime(2026, 11, 1)),
           marks: [
             (id: kept.id, photoId: kept.photoId, role: Role.hand,
-             cx: kept.cx, cy: kept.cy, r: kept.r),
+             cx: kept.cx, cy: kept.cy, r: kept.r, outline: null),
             next,
           ]);
 

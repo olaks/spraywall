@@ -69,9 +69,11 @@ phone window (the test default, 800×600, would be a wide window); pass
 sheet / save dialog / download, takes a `clock:` for the backup reminder,
 and with `keepPrefs: true` reopens the app over what the last run stored
 (how a test lets days pass). `pickedFile:` is what the file picker returns;
-reading a backup, making thumbnails and encoding share images run inline (a
-`thumbMaker:` can hold an import part-way). Rendering a share image draws in
-the engine (`dart:ui`), so it needs real time: `runAsync`, or alternate
+reading a backup, making thumbnails, encoding share images and decoding a
+photo for hold tracing run inline (a `thumbMaker:` can hold an import
+part-way); `jpegWithHold()` makes a photo with a hold for the tracer to
+find. Rendering a share image draws in the engine (`dart:ui`), so it needs
+real time: `runAsync`, or alternate
 `runAsync` gaps with pumps until the fake share has been called.
 
 Widget tests run in fake time, where a drift stream (`watch…().first`) never
@@ -106,8 +108,9 @@ state on screen, or spin on a progress indicator.
 
 ### Database
 
-Schema v1. A schema version is frozen once a release carries it — compare
-against the newest `v*` tag. An unreleased version may be amended in place,
+Schema v2 (v1 shipped in v1.0.0; v2 adds hold outlines, ADR 0002). A schema
+version is frozen once a release carries it — compare against the newest `v*`
+tag. An unreleased version may be amended in place,
 re-dumping its schema; a released one only moves forward with a migration step
 in `database.dart`.
 

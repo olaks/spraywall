@@ -1,16 +1,21 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter/foundation.dart';
 import '../database/database.dart';
 import 'mark_geometry.dart';
+import 'outline.dart';
 
-/// A mark in the editor's working copy. Normalised like a stored [Mark].
+/// A mark in the editor's working copy. Normalised like a stored [Mark]:
+/// on an outline mark, [cx], [cy] and [r] are the circle around [outline].
 @immutable
 class EditMark {
-  final String id;
-  final String photoId;
-  final Role   role;
-  final double cx;
-  final double cy;
-  final double r;
+  final String   id;
+  final String   photoId;
+  final Role     role;
+  final double   cx;
+  final double   cy;
+  final double   r;
+  final Outline? outline;
 
   const EditMark({
     required this.id,
@@ -19,21 +24,27 @@ class EditMark {
     required this.cx,
     required this.cy,
     required this.r,
+    this.outline,
   });
 
   EditMark.fromMark(Mark m)
       : id = m.id, photoId = m.photoId, role = m.role,
-        cx = m.cx, cy = m.cy, r = m.r;
+        cx = m.cx, cy = m.cy, r = m.r, outline = decodeOutline(m.outline);
 
-  MarkInput get input =>
-      (id: id, photoId: photoId, role: role, cx: cx, cy: cy, r: r);
+  MarkInput get input => (
+        id: id, photoId: photoId, role: role, cx: cx, cy: cy, r: r,
+        outline: outline == null ? null : encodeOutline(outline!),
+      );
 
-  EditMark copyWith({Role? role, double? cx, double? cy, double? r}) => EditMark(
+  EditMark copyWith({Role? role, double? cx, double? cy, double? r,
+          Outline? outline}) =>
+      EditMark(
         id: id, photoId: photoId,
-        role: role ?? this.role,
-        cx:   cx   ?? this.cx,
-        cy:   cy   ?? this.cy,
-        r:    r    ?? this.r,
+        role:    role    ?? this.role,
+        cx:      cx      ?? this.cx,
+        cy:      cy      ?? this.cy,
+        r:       r       ?? this.r,
+        outline: outline ?? this.outline,
       );
 }
 
@@ -84,12 +95,18 @@ class MarkEditorController extends ChangeNotifier {
   double nextRadius(String photoId) => _lastR[photoId] ?? kDefaultMarkR;
 
   /// Places a mark with the brush role at [cx], [cy] on [photoId] and selects
-  /// it. Always places: a tap on empty photo never just deselects.
-  EditMark place(String photoId, double cx, double cy) {
+  /// it. Always places: a tap on empty photo never just deselects. With an
+  /// [outline] (traced from the hold, on a photo of [photo] pixels) the mark
+  /// is that outline, centred on its own circle; without, a circle at the tap.
+  EditMark place(String photoId, double cx, double cy,
+      {Outline? outline, Size? photo}) {
+    final around = outline == null ? null : enclosingCircle(outline, photo!);
     final mark = EditMark(
       id: newId(), photoId: photoId, role: _brush,
-      cx: cx.clamp(0.0, 1.0), cy: cy.clamp(0.0, 1.0),
-      r:  nextRadius(photoId),
+      cx: around?.cx ?? cx.clamp(0.0, 1.0),
+      cy: around?.cy ?? cy.clamp(0.0, 1.0),
+      r:  around?.r  ?? nextRadius(photoId),
+      outline: outline,
     );
     _marks.add(mark);
     _selectedId = mark.id;
@@ -116,21 +133,33 @@ class MarkEditorController extends ChangeNotifier {
   }
 
   /// Moves a mark by a drag of [dcx], [dcy] (normalised), keeping its centre
-  /// on the photo.
+  /// on the photo. An outline moves with its centre, each point kept on the
+  /// photo.
   void move(String id, double dcx, double dcy) {
-    final m = _byId(id);
+    final m  = _byId(id);
+    final cx = (m.cx + dcx).clamp(0.0, 1.0);
+    final cy = (m.cy + dcy).clamp(0.0, 1.0);
     _replace(m.copyWith(
-        cx: (m.cx + dcx).clamp(0.0, 1.0), cy: (m.cy + dcy).clamp(0.0, 1.0)));
+      cx: cx, cy: cy,
+      outline: m.outline == null
+          ? null
+          : moveOutline(m.outline!, cx - m.cx, cy - m.cy),
+    ));
     _changed();
   }
 
-  /// Grows or shrinks a mark by [dr] within the limits. The result becomes
-  /// the size of the next mark on that photo.
+  /// Grows or shrinks a mark by [dr] within the limits; an outline scales
+  /// about its centre to match. A circle's result becomes the size of the
+  /// next circle on that photo; an outline's is the hold's own size.
   void resize(String id, double dr) {
     final m = _byId(id);
     final r = clampRadius(m.r + dr);
-    _replace(m.copyWith(r: r));
-    _lastR[m.photoId] = r;
+    final o = m.outline;
+    _replace(m.copyWith(
+      r: r,
+      outline: o == null ? null : scaleOutline(o, r / m.r, m.cx, m.cy),
+    ));
+    if (o == null) _lastR[m.photoId] = r;
     _changed();
   }
 

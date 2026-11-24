@@ -48,7 +48,7 @@ void main() {
 
     test('backup.json: version, exportedAt, and walls in list order', () async {
       final (json, _) = await open();
-      expect(json['version'], 1);
+      expect(json['version'], 2);
       expect(json['exportedAt'], '2026-11-22T09:30:00.000Z');
       expect([for (final w in json['walls']) w['name']], ['Home wall', 'Gym']);
     });

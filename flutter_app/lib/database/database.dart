@@ -157,6 +157,7 @@ typedef MarkInput = ({
   double cx,
   double cy,
   double r,
+  String? outline,
 });
 
 /// What a problem is besides its marks: the details sheet's fields.
@@ -218,11 +219,15 @@ class AppDatabase extends _$AppDatabase {
   /// A schema version is frozen once a release carries it: change the tables
   /// only by bumping this, dumping the schema and adding a migration step.
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      // v2: a mark can be a hold's outline. Existing marks stay circles.
+      if (from < 2) await m.addColumn(marks, marks.outline);
+    },
     beforeOpen: (details) async {
       // sqlite3 ignores foreign keys unless asked. Without this, a delete that
       // forgets to clean up its children fails silently instead of throwing.
@@ -816,6 +821,7 @@ class AppDatabase extends _$AppDatabase {
       MarksCompanion.insert(
         id: Value(m.id), problemId: problemId, photoId: m.photoId,
         role: m.role, cx: m.cx, cy: m.cy, r: m.r,
+        outline: Value(m.outline),
       );
 
   // ── Backups ────────────────────────────────────────────────────────────

@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database.dart';
 import '../marks/mark_editor.dart';
 import '../marks/mark_geometry.dart';
+import '../marks/outline.dart';
 import '../providers/app_providers.dart';
 
 /// A photo's thumbnail with [marks] drawn on it, as large as fits its box
-/// at the photo's own shape, so the circles land where they do on the photo.
+/// at the photo's own shape, so the marks land where they do on the photo.
 /// Loads only the thumbnail bytes.
 class MarkedThumb extends ConsumerWidget {
   final WallPhoto      photo;
@@ -31,7 +32,7 @@ class MarkedThumb extends ConsumerWidget {
   }
 }
 
-/// The same circles as on the photo, scaled to the thumbnail, with a floor
+/// The same marks as on the photo, scaled to the thumbnail, with a floor
 /// so a foot chip still shows.
 class _ThumbMarks extends CustomPainter {
   final List<EditMark> marks;
@@ -39,15 +40,21 @@ class _ThumbMarks extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style       = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
     for (final m in marks) {
-      canvas.drawCircle(
-        centrePx(m.cx, m.cy, size),
-        radiusPx(m.r, size).clamp(1.5, double.infinity),
-        Paint()
-          ..style       = PaintingStyle.stroke
-          ..strokeWidth = 1.2
-          ..color       = roleColors[m.role]!,
-      );
+      paint.color = roleColors[m.role]!;
+      // A hold too small to show its shape here shows as the floor's circle.
+      if (m.outline == null || radiusPx(m.r, size) < 3) {
+        canvas.drawCircle(
+          centrePx(m.cx, m.cy, size),
+          radiusPx(m.r, size).clamp(1.5, double.infinity),
+          paint,
+        );
+      } else {
+        canvas.drawPath(markPath(m.cx, m.cy, m.r, m.outline, size), paint);
+      }
     }
   }
 

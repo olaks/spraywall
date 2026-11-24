@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../database/tables.dart' show Role;
 import 'mark_editor.dart';
 import 'mark_geometry.dart';
+import 'outline.dart';
 
-/// Draws marks over a photo inside a `ZoomablePhoto`, in photo pixels, and
+/// Draws marks (circles and hold outlines) over a photo inside a
+/// `ZoomablePhoto`, in photo pixels, and
 /// takes the editor's gestures: a tap on empty photo, a tap on a mark, and
 /// drags of the selected mark and its resize handle. Without callbacks it
 /// only draws (the problem view).
@@ -97,7 +99,13 @@ class MarkLayer extends StatelessWidget {
               onPanUpdate: canMove ? (d) => onMove!(m.id, d.delta) : null,
               child: CustomPaint(
                 painter: _MarkPainter(
-                    m.role, rPx, half, zoom, selected: selected),
+                    m.role,
+                    // The shape in this box's own coordinates.
+                    markPath(m.cx, m.cy, m.r, m.outline, photo)
+                        .shift(Offset(half, half) - centre),
+                    rPx, half, zoom,
+                    outline:  m.outline,
+                    selected: selected),
               ),
             ),
           ),
@@ -137,42 +145,49 @@ class MarkLayer extends StatelessWidget {
 }
 
 class _MarkPainter extends CustomPainter {
-  final Role   role;
-  final double rPx;
-  final double half;
-  final double zoom;
-  final bool   selected;
+  final Role     role;
+  final Path     path;
+  final double   rPx;
+  final double   half;
+  final double   zoom;
+  final Outline? outline;
+  final bool     selected;
 
-  _MarkPainter(this.role, this.rPx, this.half, this.zoom,
-      {required this.selected});
+  _MarkPainter(this.role, this.path, this.rPx, this.half, this.zoom,
+      {required this.outline, required this.selected});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c      = Offset(half, half);
     final stroke = (selected ? 3.5 : 2.5) / zoom;
-    // A dark halo first, so the colour reads on beige wood and plywood alike.
-    canvas.drawCircle(c, rPx, Paint()
-      ..style       = PaintingStyle.stroke
-      ..strokeWidth = stroke * 2.2
-      ..color       = Colors.black54);
-    canvas.drawCircle(c, rPx, Paint()
-      ..style       = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..color       = roleColors[role]!);
     if (selected) {
-      canvas.drawCircle(c, rPx + 4 / zoom, Paint()
-        ..style       = PaintingStyle.stroke
-        ..strokeWidth = 1.5 / zoom
-        ..color       = Colors.white);
+      // A white rim outside the halo: around a circle, a ring just outside
+      // it; around an outline, a wider stroke under the halo.
+      if (outline == null) {
+        canvas.drawCircle(Offset(half, half), rPx + 4 / zoom, Paint()
+          ..style       = PaintingStyle.stroke
+          ..strokeWidth = 1.5 / zoom
+          ..color       = Colors.white);
+      } else {
+        canvas.drawPath(path, Paint()
+          ..style       = PaintingStyle.stroke
+          ..strokeWidth = stroke * 2.2 + 3 / zoom
+          ..strokeJoin  = StrokeJoin.round
+          ..color       = Colors.white);
+      }
     }
+    strokeMark(canvas, path, roleColors[role]!, stroke);
   }
 
+  /// Inside the shape, or near enough its centre that a small mark stays
+  /// [kMinHitScreenPx] easy to hit.
   @override
-  bool hitTest(Offset position) =>
-      hitsMark(position, Offset(half, half), rPx, zoom);
+  bool hitTest(Offset position) => outline == null
+      ? hitsMark(position, Offset(half, half), rPx, zoom)
+      : path.contains(position) ||
+          hitsMark(position, Offset(half, half), 0, zoom);
 
   @override
   bool shouldRepaint(_MarkPainter o) =>
       o.role != role || o.rPx != rPx || o.zoom != zoom ||
-      o.selected != selected || o.half != half;
+      o.selected != selected || o.half != half || o.outline != outline;
 }

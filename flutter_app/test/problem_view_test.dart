@@ -23,8 +23,8 @@ void main() {
       layoutId: layout, name: 'Arête', grade: '6B',
       description: 'Sit start, arête is in.', setOn: DateTime(2026, 11, 20),
       marks: [
-        (id: newId(), photoId: photo, role: Role.start,  cx: 0.3, cy: 0.8, r: 0.02),
-        (id: newId(), photoId: photo, role: Role.finish, cx: 0.6, cy: 0.1, r: 0.02),
+        (id: newId(), photoId: photo, role: Role.start,  cx: 0.3, cy: 0.8, r: 0.02, outline: null),
+        (id: newId(), photoId: photo, role: Role.finish, cx: 0.6, cy: 0.1, r: 0.02, outline: null),
       ],
     );
   });
@@ -77,7 +77,7 @@ void main() {
 
     final bare = await db.createProblem(
       layoutId: layout, name: 'Crimps', setOn: DateTime(2026, 11, 21),
-      marks: [(id: newId(), photoId: photo, role: Role.hand, cx: 0.5, cy: 0.5, r: 0.02)],
+      marks: [(id: newId(), photoId: photo, role: Role.hand, cx: 0.5, cy: 0.5, r: 0.02, outline: null)],
     );
     await goTo(tester, '/walls/$wall/problems/$bare');
     expect(find.text('Set 2026-11-21'), findsNothing);
@@ -89,8 +89,8 @@ void main() {
     final onSecond = await db.createProblem(
       layoutId: layout, name: 'Kicker start', setOn: DateTime(2026, 11, 21),
       marks: [
-        (id: newId(), photoId: photo,   role: Role.hand,  cx: 0.5, cy: 0.5, r: 0.02),
-        (id: newId(), photoId: second!, role: Role.start, cx: 0.5, cy: 0.5, r: 0.02),
+        (id: newId(), photoId: photo,   role: Role.hand,  cx: 0.5, cy: 0.5, r: 0.02, outline: null),
+        (id: newId(), photoId: second!, role: Role.start, cx: 0.5, cy: 0.5, r: 0.02, outline: null),
       ],
     );
     await pumpApp(tester, db);
@@ -142,7 +142,7 @@ void main() {
   testApp("Edit details refuses another problem's name", (tester) async {
     await db.createProblem(
       layoutId: layout, name: 'Crimps', setOn: DateTime(2026, 11, 21),
-      marks: [(id: newId(), photoId: photo, role: Role.hand, cx: 0.5, cy: 0.5, r: 0.02)],
+      marks: [(id: newId(), photoId: photo, role: Role.hand, cx: 0.5, cy: 0.5, r: 0.02, outline: null)],
     );
     await openView(tester);
     await menu(tester, 'Edit');

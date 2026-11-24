@@ -1979,6 +1979,17 @@ class $MarksTable extends Marks with TableInfo<$MarksTable, Mark> {
     type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _outlineMeta = const VerificationMeta(
+    'outline',
+  );
+  @override
+  late final GeneratedColumn<String> outline = GeneratedColumn<String>(
+    'outline',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1988,6 +1999,7 @@ class $MarksTable extends Marks with TableInfo<$MarksTable, Mark> {
     cx,
     cy,
     r,
+    outline,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2035,6 +2047,12 @@ class $MarksTable extends Marks with TableInfo<$MarksTable, Mark> {
     } else if (isInserting) {
       context.missing(_rMeta);
     }
+    if (data.containsKey('outline')) {
+      context.handle(
+        _outlineMeta,
+        outline.isAcceptableOrUnknown(data['outline']!, _outlineMeta),
+      );
+    }
     return context;
   }
 
@@ -2074,6 +2092,10 @@ class $MarksTable extends Marks with TableInfo<$MarksTable, Mark> {
         DriftSqlType.double,
         data['${effectivePrefix}r'],
       )!,
+      outline: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}outline'],
+      ),
     );
   }
 
@@ -2094,6 +2116,7 @@ class Mark extends DataClass implements Insertable<Mark> {
   final double cx;
   final double cy;
   final double r;
+  final String? outline;
   const Mark({
     required this.id,
     required this.problemId,
@@ -2102,6 +2125,7 @@ class Mark extends DataClass implements Insertable<Mark> {
     required this.cx,
     required this.cy,
     required this.r,
+    this.outline,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2115,6 +2139,9 @@ class Mark extends DataClass implements Insertable<Mark> {
     map['cx'] = Variable<double>(cx);
     map['cy'] = Variable<double>(cy);
     map['r'] = Variable<double>(r);
+    if (!nullToAbsent || outline != null) {
+      map['outline'] = Variable<String>(outline);
+    }
     return map;
   }
 
@@ -2127,6 +2154,9 @@ class Mark extends DataClass implements Insertable<Mark> {
       cx: Value(cx),
       cy: Value(cy),
       r: Value(r),
+      outline: outline == null && nullToAbsent
+          ? const Value.absent()
+          : Value(outline),
     );
   }
 
@@ -2145,6 +2175,7 @@ class Mark extends DataClass implements Insertable<Mark> {
       cx: serializer.fromJson<double>(json['cx']),
       cy: serializer.fromJson<double>(json['cy']),
       r: serializer.fromJson<double>(json['r']),
+      outline: serializer.fromJson<String?>(json['outline']),
     );
   }
   @override
@@ -2158,6 +2189,7 @@ class Mark extends DataClass implements Insertable<Mark> {
       'cx': serializer.toJson<double>(cx),
       'cy': serializer.toJson<double>(cy),
       'r': serializer.toJson<double>(r),
+      'outline': serializer.toJson<String?>(outline),
     };
   }
 
@@ -2169,6 +2201,7 @@ class Mark extends DataClass implements Insertable<Mark> {
     double? cx,
     double? cy,
     double? r,
+    Value<String?> outline = const Value.absent(),
   }) => Mark(
     id: id ?? this.id,
     problemId: problemId ?? this.problemId,
@@ -2177,6 +2210,7 @@ class Mark extends DataClass implements Insertable<Mark> {
     cx: cx ?? this.cx,
     cy: cy ?? this.cy,
     r: r ?? this.r,
+    outline: outline.present ? outline.value : this.outline,
   );
   Mark copyWithCompanion(MarksCompanion data) {
     return Mark(
@@ -2187,6 +2221,7 @@ class Mark extends DataClass implements Insertable<Mark> {
       cx: data.cx.present ? data.cx.value : this.cx,
       cy: data.cy.present ? data.cy.value : this.cy,
       r: data.r.present ? data.r.value : this.r,
+      outline: data.outline.present ? data.outline.value : this.outline,
     );
   }
 
@@ -2199,13 +2234,15 @@ class Mark extends DataClass implements Insertable<Mark> {
           ..write('role: $role, ')
           ..write('cx: $cx, ')
           ..write('cy: $cy, ')
-          ..write('r: $r')
+          ..write('r: $r, ')
+          ..write('outline: $outline')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, problemId, photoId, role, cx, cy, r);
+  int get hashCode =>
+      Object.hash(id, problemId, photoId, role, cx, cy, r, outline);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2216,7 +2253,8 @@ class Mark extends DataClass implements Insertable<Mark> {
           other.role == this.role &&
           other.cx == this.cx &&
           other.cy == this.cy &&
-          other.r == this.r);
+          other.r == this.r &&
+          other.outline == this.outline);
 }
 
 class MarksCompanion extends UpdateCompanion<Mark> {
@@ -2227,6 +2265,7 @@ class MarksCompanion extends UpdateCompanion<Mark> {
   final Value<double> cx;
   final Value<double> cy;
   final Value<double> r;
+  final Value<String?> outline;
   final Value<int> rowid;
   const MarksCompanion({
     this.id = const Value.absent(),
@@ -2236,6 +2275,7 @@ class MarksCompanion extends UpdateCompanion<Mark> {
     this.cx = const Value.absent(),
     this.cy = const Value.absent(),
     this.r = const Value.absent(),
+    this.outline = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MarksCompanion.insert({
@@ -2246,6 +2286,7 @@ class MarksCompanion extends UpdateCompanion<Mark> {
     required double cx,
     required double cy,
     required double r,
+    this.outline = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : problemId = Value(problemId),
        photoId = Value(photoId),
@@ -2261,6 +2302,7 @@ class MarksCompanion extends UpdateCompanion<Mark> {
     Expression<double>? cx,
     Expression<double>? cy,
     Expression<double>? r,
+    Expression<String>? outline,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2271,6 +2313,7 @@ class MarksCompanion extends UpdateCompanion<Mark> {
       if (cx != null) 'cx': cx,
       if (cy != null) 'cy': cy,
       if (r != null) 'r': r,
+      if (outline != null) 'outline': outline,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2283,6 +2326,7 @@ class MarksCompanion extends UpdateCompanion<Mark> {
     Value<double>? cx,
     Value<double>? cy,
     Value<double>? r,
+    Value<String?>? outline,
     Value<int>? rowid,
   }) {
     return MarksCompanion(
@@ -2293,6 +2337,7 @@ class MarksCompanion extends UpdateCompanion<Mark> {
       cx: cx ?? this.cx,
       cy: cy ?? this.cy,
       r: r ?? this.r,
+      outline: outline ?? this.outline,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2321,6 +2366,9 @@ class MarksCompanion extends UpdateCompanion<Mark> {
     if (r.present) {
       map['r'] = Variable<double>(r.value);
     }
+    if (outline.present) {
+      map['outline'] = Variable<String>(outline.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2337,6 +2385,7 @@ class MarksCompanion extends UpdateCompanion<Mark> {
           ..write('cx: $cx, ')
           ..write('cy: $cy, ')
           ..write('r: $r, ')
+          ..write('outline: $outline, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4497,6 +4546,7 @@ typedef $$MarksTableCreateCompanionBuilder =
       required double cx,
       required double cy,
       required double r,
+      Value<String?> outline,
       Value<int> rowid,
     });
 typedef $$MarksTableUpdateCompanionBuilder =
@@ -4508,6 +4558,7 @@ typedef $$MarksTableUpdateCompanionBuilder =
       Value<double> cx,
       Value<double> cy,
       Value<double> r,
+      Value<String?> outline,
       Value<int> rowid,
     });
 
@@ -4581,6 +4632,11 @@ class $$MarksTableFilterComposer extends Composer<_$AppDatabase, $MarksTable> {
 
   ColumnFilters<double> get r => $composableBuilder(
     column: $table.r,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get outline => $composableBuilder(
+    column: $table.outline,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4665,6 +4721,11 @@ class $$MarksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get outline => $composableBuilder(
+    column: $table.outline,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProblemsTableOrderingComposer get problemId {
     final $$ProblemsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -4735,6 +4796,9 @@ class $$MarksTableAnnotationComposer
 
   GeneratedColumn<double> get r =>
       $composableBuilder(column: $table.r, builder: (column) => column);
+
+  GeneratedColumn<String> get outline =>
+      $composableBuilder(column: $table.outline, builder: (column) => column);
 
   $$ProblemsTableAnnotationComposer get problemId {
     final $$ProblemsTableAnnotationComposer composer = $composerBuilder(
@@ -4818,6 +4882,7 @@ class $$MarksTableTableManager
                 Value<double> cx = const Value.absent(),
                 Value<double> cy = const Value.absent(),
                 Value<double> r = const Value.absent(),
+                Value<String?> outline = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MarksCompanion(
                 id: id,
@@ -4827,6 +4892,7 @@ class $$MarksTableTableManager
                 cx: cx,
                 cy: cy,
                 r: r,
+                outline: outline,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4838,6 +4904,7 @@ class $$MarksTableTableManager
                 required double cx,
                 required double cy,
                 required double r,
+                Value<String?> outline = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MarksCompanion.insert(
                 id: id,
@@ -4847,6 +4914,7 @@ class $$MarksTableTableManager
                 cx: cx,
                 cy: cy,
                 r: r,
+                outline: outline,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -21,11 +21,11 @@ A named boulder climb on a layout, defined by the holds it highlights. No two pr
 _Avoid_: Route, climb, boulder
 
 **Mark**:
-A highlight drawn on a wall photo to show that a hold belongs to one problem. Marks belong to their problem; holds are not recorded on their own.
-_Avoid_: Highlight, hold (when you mean the drawn mark), annotation
+A highlight drawn on a wall photo to show that a hold belongs to one problem: the hold's **outline**, traced from the photo where a tap lands on a hold, or a circle where tracing can't find one. Marks belong to their problem; holds are not recorded on their own, and an outline is the mark's shape, not a recorded hold.
+_Avoid_: Highlight, hold (when you mean the drawn mark), annotation, ring (for every mark: an outline mark isn't round)
 
 **Overlapping marks**:
-Marks from different problems on the same wall photo whose circles cross or touch. They usually mean the problems share a hold.
+Marks from different problems on the same wall photo whose shapes (outlines or circles) cross or touch, one inside the other included. They usually mean the problems share a hold.
 _Avoid_: Shared hold (holds are not recorded), same hold, collision
 
 **Role**:

@@ -68,7 +68,7 @@ void main() {
             layoutId: layout, name: name, grade: grade,
             setOn: DateTime(2026, 11, 22),
             marks: [(id: newId(), photoId: on ?? photo, role: Role.hand,
-                     cx: cx, cy: cy, r: 0.02)],
+                     cx: cx, cy: cy, r: 0.02, outline: null)],
           );
       ids = {
         'Arête':     await problem('Arête', '6B', 0.5,   0.5),

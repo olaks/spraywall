@@ -95,9 +95,13 @@ class Problems extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// A circle on one wall photo. `cx`/`cy` are 0..1 of the photo's width and
-/// height; `r` is a fraction of its **width**, so a circle stays round on a
-/// portrait photo. Marks draw in insertion order.
+/// A hold marked on one wall photo: a circle, or the hold's outline.
+/// `cx`/`cy` are 0..1 of the photo's width and height; `r` is a fraction of
+/// its **width**, so a circle stays round on a portrait photo. On an outline
+/// mark they are the circle around the outline (docs/adr/0002-hold-outlines.md).
+/// `outline` is null for a circle, otherwise its points as `x y x y …`, each
+/// 0..1 of width or height (`lib/marks/outline.dart`). Marks draw in
+/// insertion order.
 @TableIndex(name: 'marks_problem', columns: {#problemId})
 @TableIndex(name: 'marks_photo',   columns: {#photoId})
 class Marks extends Table {
@@ -108,6 +112,7 @@ class Marks extends Table {
   RealColumn get cx        => real()();
   RealColumn get cy        => real()();
   RealColumn get r         => real()();
+  TextColumn get outline   => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

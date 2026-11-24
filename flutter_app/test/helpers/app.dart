@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spraywall/app.dart';
 import 'package:spraywall/backup/backup_import.dart';
 import 'package:spraywall/database/database.dart';
+import 'package:spraywall/marks/hold_trace.dart';
 import 'package:spraywall/photos/photo_import.dart';
 import 'package:spraywall/photos/photo_source.dart';
 import 'package:spraywall/providers/app_providers.dart';
@@ -74,8 +75,9 @@ const phone = Size(400, 800);
 /// coming back days later would. [pickedFile] is what the file picker hands
 /// back (null: the user backed out); [thumbMaker] replaces the inline
 /// thumbnail maker, to hold an import part-way.
-/// Photo import, reading a backup, making thumbnails and encoding share
-/// images run inline: an isolate never finishes under fake time.
+/// Photo import, reading a backup, making thumbnails, encoding share images
+/// and decoding a photo for tracing run inline: an isolate never finishes
+/// under fake time, nor does an engine decode.
 Future<void> pumpApp(
   WidgetTester tester,
   AppDatabase  db, {
@@ -104,6 +106,7 @@ Future<void> pumpApp(
           ({required extension}) async => pickedFile),
       backupParserProvider.overrideWithValue((bytes) async => parseBackup(bytes)),
       shareEncoderProvider.overrideWithValue((image) async => encodeShareJpeg(image)),
+      pixelDecoderProvider.overrideWithValue((jpeg) async => decodePixels(jpeg)),
       thumbMakerProvider.overrideWithValue(
           thumbMaker ?? (data) async => makeThumb(data)),
       if (clock != null) clockProvider.overrideWithValue(clock),

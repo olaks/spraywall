@@ -61,6 +61,8 @@ void main() {
     return ZipEncoder().encodeBytes(out);
   }
 
+  const outline = '0.1000 0.2000 0.3000 0.2000 0.2000 0.4000';
+
   late AppDatabase source;
   late String      home;
   late String      first;
@@ -77,6 +79,9 @@ void main() {
     arete  = await seedProblem(source, first, name: 'Arête', grade: '6B',
         marks: [(kicker, Role.finish), (photo, Role.start), (photo, Role.hand)]);
     await seedProblem(source, first, name: 'Crimps', marks: [(photo, Role.foot)]);
+    // One mark is a hold's outline (backup version 2).
+    await source.customStatement('UPDATE marks SET outline = ? WHERE id = '
+        '(SELECT id FROM marks ORDER BY rowid LIMIT 1)', [outline]);
     await source.retireProblem(arete, today: DateTime(2026, 10, 1));
     await source.resetLayout(home, name: 'Winter', startedOn: DateTime(2026, 11, 1));
     final winter = await currentLayoutId(source, home);
@@ -115,6 +120,42 @@ void main() {
           'Nothing new: everything in it was already here.');
       expect(again.alreadyHere.problems, 3);
     });
+  });
+
+  group('version 1, from before hold outlines', () {
+    test('imports, every mark a circle', () async {
+      final v1 = rezip(backup, edit: (j) {
+        j['version'] = 1;
+        for (final w in j['walls']) {
+          for (final l in w['layouts']) {
+            for (final p in l['problems']) {
+              for (final m in p['marks']) {
+                (m as Map).remove('outline');
+              }
+            }
+          }
+        }
+      });
+      final target = openTestDb();
+      addTearDown(target.close);
+      await import(target, v1);
+      final marks = await target.select(target.marks).get();
+      expect(marks, hasLength((await source.select(source.marks).get()).length));
+      expect(marks.map((m) => m.outline), everyElement(isNull));
+    });
+  });
+
+  test('an outline is written as numbers, and a circle has none', () async {
+    final json = jsonDecode(utf8.decode(ZipDecoder().decodeBytes(backup)
+        .findFile(backupJsonName)!.content)) as Map<String, dynamic>;
+    final marks = [
+      for (final w in json['walls'])
+        for (final l in w['layouts'])
+          for (final p in l['problems'])
+            for (final m in p['marks']) m as Map<String, dynamic>,
+    ];
+    expect(marks.where((m) => m.containsKey('outline')).single['outline'],
+        [0.1, 0.2, 0.3, 0.2, 0.2, 0.4]);
   });
 
   test('200 marks cost no more statements than 5', () async {
@@ -165,8 +206,8 @@ void main() {
     });
 
     test('a newer version is refused clearly; an unknown one is damage', () {
-      refused(rezip(backup, edit: (j) => j['version'] = 2),
-          'made by a newer version of Spraywall (format 2)');
+      refused(rezip(backup, edit: (j) => j['version'] = 3),
+          'made by a newer version of Spraywall (format 3)');
       refused(rezip(backup, edit: (j) => j['version'] = 0), 'damaged');
       refused(rezip(backup, edit: (j) => j.remove('version')),
           'backup has no version');
@@ -198,6 +239,12 @@ void main() {
           j['walls'][1]['id'] = j['walls'][0]['id']), 'appears twice');
       refused(rezip(backup, edit: (j) =>
           j['walls'][0]['layouts'][0].remove('endedOn')), 'two current layouts');
+      for (final bad in <Object>[[0.1, 0.2, 0.3, 0.4], [0.1, 0.2, 0.3, 0.4, 0.5],
+                                 [0.1, 0.2, 0.3, 0.4, 0.5, 1.5], 'x']) {
+        refused(rezip(backup, edit: (j) =>
+                firstProblem(j)['marks'][0]['outline'] = bad),
+            bad is String ? 'outline of the wrong kind' : 'not a list of points');
+      }
     });
 
     test('an id here under another parent rolls everything back', () async {

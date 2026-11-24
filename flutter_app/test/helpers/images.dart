@@ -21,3 +21,18 @@ Uint8List jpegFixture({
   }
   return img.encodeJpg(image, quality: 85);
 }
+
+/// A wall-coloured JPEG with one red hold: a disc of [radius] px at
+/// [centre]. Something for the tracer to find.
+Uint8List jpegWithHold({
+  int width  = 1600,
+  int height = 1200,
+  required (int, int) centre,
+  required int radius,
+}) {
+  final image = img.Image(width: width, height: height)
+    ..clear(img.ColorRgb8(214, 186, 140));
+  img.fillCircle(image, x: centre.$1, y: centre.$2, radius: radius,
+      color: img.ColorRgb8(200, 30, 40));
+  return img.encodeJpg(image, quality: 90);
+}

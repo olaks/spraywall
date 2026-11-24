@@ -51,6 +51,9 @@ Manual checklist (spec: Testing Decisions):
   [ ] Android: with "Don't keep activities" on, a camera photo is still added
   [ ] Linux: picking a wall photo from a file works
   [ ] Marks look right on the sample wall photo
+  [ ] Hold outlines on the sample wall, on Android and the web: a tap on a
+      coloured hold traces it with no visible wait; a pale hold gives a
+      circle; zoomed in on a small hold, the outline follows its edge
   [ ] Export everything: the share sheet on Android, a save dialog on Linux,
       a download on the web; the .zip opens and holds backup.json + photos/
   [ ] Import that .zip on another platform: the summary adds everything,

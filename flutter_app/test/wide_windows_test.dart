@@ -25,7 +25,7 @@ void main() {
       layoutId: layout, name: 'Arête', grade: '6B',
       description: 'Sit start, arête is in.', setOn: DateTime(2026, 11, 20),
       marks: [
-        (id: newId(), photoId: whole, role: Role.start, cx: 0.3, cy: 0.8, r: 0.02),
+        (id: newId(), photoId: whole, role: Role.start, cx: 0.3, cy: 0.8, r: 0.02, outline: null),
       ],
     );
   });

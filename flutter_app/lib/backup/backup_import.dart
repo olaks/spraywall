@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:ui' show Offset;
+
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database.dart';
+import '../marks/outline.dart';
 import '../photos/photo_import.dart';
 import 'backup_export.dart';
 
@@ -134,6 +137,7 @@ BackupRows parseBackup(Uint8List bytes) {
             cx:        m.number('cx'),
             cy:        m.number('cy'),
             r:         m.number('r'),
+            outline:   m.outline('outline'),
           ));
         }
       }
@@ -171,6 +175,22 @@ class _Reader {
   String? textOrNull(String key) => _get<String?>(key);
   int     integer(String key)    => _get<int>(key);
   double  number(String key)     => _get<num>(key).toDouble();
+
+  /// A mark's outline, as stored: absent (a version 1 backup, or a circle),
+  /// or at least three points as a flat list of 0..1 numbers.
+  String? outline(String key) {
+    final v = _get<List<Object?>?>(key);
+    if (v == null) return null;
+    if (v.length < 6 || v.length.isOdd ||
+        v.any((n) => n is! num || n < 0 || n > 1)) {
+      throw _damaged('$_where has an outline that is not a list of points');
+    }
+    final nums = v.cast<num>();
+    return encodeOutline([
+      for (var i = 0; i < nums.length; i += 2)
+        Offset(nums[i].toDouble(), nums[i + 1].toDouble()),
+    ]);
+  }
 
   T byName<T extends Enum>(String key, List<T> values) {
     final name = text(key);

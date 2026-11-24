@@ -1,0 +1,7 @@
+# Hold outlines beside circles, each mark keeping its circle
+
+A mark can be a hold's outline, traced on the device from the photo where a tap lands on a hold. Circles stay: they are the fallback where tracing can't tell a hold from the wall (a pale hold on pale plywood), and every mark made before schema v2 is one. A nullable `Marks.outline` holds the outline as `x y x y …` text, each number 0..1 of the photo's width or height like the centre. Every mark still has `cx`, `cy` and `r`: on an outline mark they are the circle around it. That keeps the minimum tap target, the thumbnails' floor size and a cheap overlap rejection working unchanged, and keeps an outline readable as a circle by anything that ignores the column. Converting old circles into polygons would have left one code path but lost what the user drew, and there is no way back from it.
+
+Tracing is pure Dart (colour region growing in CIE Lab from the tap), not a segmentation model: the same code runs on Android, Linux and the WASM web build, needs no model download, and is unit-tested on generated images. Its search window follows the zoom (about 200 screen pixels around the tap, capped at the largest mark), so zooming in on a small or low-contrast hold gives the tracer finer pixels to work with.
+
+Released schema v1 moves forward with a migration step (add the column); backups go to format 2, with an optional `outline` list of numbers per mark, and format 1 still imports.

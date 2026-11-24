@@ -1,6 +1,9 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart' show Uint8List;
 import '../database/database.dart';
+import '../marks/hold_trace.dart';
 import '../problems/browse.dart';
 
 // ── Database singleton ─────────────────────────────────────────────────────
@@ -41,6 +44,30 @@ final photoImageProvider =
 /// A photo's thumbnail, for lists and the photo strip.
 final photoThumbProvider = FutureProvider.autoDispose.family<Uint8List?, String>(
     (ref, id) => ref.watch(dbProvider).photoThumb(id));
+
+/// Decodes a wall photo's JPEG to pixels for tracing holds: the engine's
+/// decoder, native on every platform. Overridden in widget tests with
+/// [decodePixels], since an engine decode needs real time.
+final pixelDecoderProvider = Provider<Future<PhotoPixels> Function(Uint8List)>(
+    (ref) => _decodeWithEngine);
+
+Future<PhotoPixels> _decodeWithEngine(Uint8List jpeg) async {
+  final codec = await ui.instantiateImageCodec(jpeg);
+  final image = (await codec.getNextFrame()).image;
+  final data  = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+  final px    = PhotoPixels(image.width, image.height, data.buffer.asUint8List());
+  image.dispose();
+  codec.dispose();
+  return px;
+}
+
+/// A photo's pixels at full size, for tracing holds while the editor shows
+/// it. Auto-disposed: about 20 MB for a 2560 px photo.
+final photoPixelsProvider =
+    FutureProvider.autoDispose.family<PhotoPixels?, String>((ref, id) async {
+  final image = await ref.watch(photoImageProvider(id).future);
+  return image == null ? null : ref.watch(pixelDecoderProvider)(image.data);
+});
 
 /// Every mark of a layout's problems, for the list's thumbnails.
 final layoutMarksProvider = StreamProvider.family<List<Mark>, String>(
