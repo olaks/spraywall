@@ -81,6 +81,50 @@ void main() {
       expect(c.marks.single.r, closeTo(m.r * 2, 1e-9));
     });
 
+    test("dragging a point reshapes the outline and refits the mark's "
+        'circle; it stays on the photo', () {
+      final c = MarkEditorController();
+      final m = placed(c);
+      c.movePoint(m.id, 1, 0.05, 0.05, photo);
+      final moved = c.marks.single;
+      expect(moved.outline![1].dx, closeTo(0.60, 1e-9));
+      expect(moved.outline![1].dy, closeTo(0.50, 1e-9));
+      expect(moved.outline![0], box[0], reason: 'the others stay');
+      final fit = enclosingCircle(moved.outline!, photo);
+      expect((moved.cx, moved.cy, moved.r), (fit.cx, fit.cy, fit.r));
+      expect(c.dirty, isTrue);
+
+      c.movePoint(m.id, 1, 2, -2, photo);
+      expect(c.marks.single.outline![1], const Offset(1, 0));
+    });
+
+    test('a point added on an edge goes between its two ends', () {
+      final c = MarkEditorController();
+      final m = placed(c);
+      final i = c.insertPoint(m.id, 1, const Offset(0.6, 0.5), photo);
+      expect(i, 2);
+      expect(c.marks.single.outline, [
+        box[0], box[1], const Offset(0.6, 0.5), box[2], box[3],
+      ]);
+      // After the last point, the edge back to the first.
+      final j = c.insertPoint(m.id, 4, const Offset(0.4, 0.5), photo);
+      expect(j, 5);
+      expect(c.marks.single.outline!.last, const Offset(0.4, 0.5));
+      final fit = enclosingCircle(c.marks.single.outline!, photo);
+      expect(c.marks.single.r, fit.r);
+    });
+
+    test('a point can be removed, down to three', () {
+      final c = MarkEditorController();
+      final m = placed(c);
+      c.removePoint(m.id, 0, photo);
+      expect(c.marks.single.outline, [box[1], box[2], box[3]]);
+      final fit = enclosingCircle(c.marks.single.outline!, photo);
+      expect(c.marks.single.cx, fit.cx);
+      c.removePoint(m.id, 0, photo);
+      expect(c.marks.single.outline, hasLength(3), reason: 'a polygon');
+    });
+
     test('a stored outline comes back into the editor', () {
       final m = EditMark.fromMark(Mark(id: 'm', problemId: 'q', photoId: 'p',
           role: Role.hand, cx: 0.5, cy: 0.5, r: 0.06,

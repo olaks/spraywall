@@ -8,9 +8,10 @@ import 'outline.dart';
 
 /// Draws marks (circles and hold outlines) over a photo inside a
 /// `ZoomablePhoto`, in photo pixels, and
-/// takes the editor's gestures: a tap on empty photo, a tap on a mark, and
-/// drags of the selected mark and its resize handle. Without callbacks it
-/// only draws (the problem view).
+/// takes the editor's gestures: a tap on empty photo, a tap on a mark,
+/// drags of the selected mark and its resize handle, and on a selected
+/// outline its point handles. Without callbacks it only draws (the problem
+/// view).
 ///
 /// Strokes and handles are divided by the zoom, so they stay the same size
 /// on screen; unselected marks stay at least [kMinHitScreenPx] to hit.
@@ -30,7 +31,17 @@ class MarkLayer extends StatelessWidget {
   /// The selected mark's handle dragged by a horizontal delta in photo px.
   final void Function(String id, double delta)? onResize;
 
-  /// True while the selected mark or its handle is pressed.
+  /// A point of the selected outline dragged by a delta in photo pixels.
+  final void Function(String id, int index, Offset delta)? onMovePoint;
+
+  /// A midpoint of the selected outline tapped: a point to add on the edge
+  /// after point `after`, at `at` in photo pixels.
+  final void Function(String id, int after, Offset at)? onAddPoint;
+
+  /// A point of the selected outline double-tapped, to remove it.
+  final void Function(String id, int index)? onRemovePoint;
+
+  /// True while the selected mark or one of its handles is pressed.
   final ValueChanged<bool>? onHold;
 
   const MarkLayer({
@@ -43,6 +54,9 @@ class MarkLayer extends StatelessWidget {
     this.onTapMark,
     this.onMove,
     this.onResize,
+    this.onMovePoint,
+    this.onAddPoint,
+    this.onRemovePoint,
     this.onHold,
   });
 
@@ -110,6 +124,8 @@ class MarkLayer extends StatelessWidget {
             ),
           ),
         ),
+        if (selected && m.outline != null && onMovePoint != null)
+          ..._pointHandles(m, Offset(half, half) - centre, zoom, hold),
         if (selected && onResize != null)
           Positioned(
             left:   half + rPx - handle / 2,
@@ -141,6 +157,87 @@ class MarkLayer extends StatelessWidget {
           ),
       ]),
     );
+  }
+}
+
+extension on MarkLayer {
+  /// The selected outline's point handles, and a midpoint dot on each edge
+  /// long enough to hold one, placed by [shift] from photo pixels into the
+  /// mark's box. A point closer than a handle (on screen) to the last one
+  /// shown has none: at fit zoom a traced outline's points would crowd, and
+  /// zooming in gives more of them handles.
+  List<Widget> _pointHandles(
+      EditMark m, Offset shift, double zoom, void Function(bool) hold) {
+    final pts  = outlinePx(m.outline!, photo);
+    final size = kPointScreenPx / zoom;
+    final shown = <int>[];
+    for (var i = 0; i < pts.length; i++) {
+      if (shown.isEmpty ||
+          ((pts[i] - pts[shown.last]).distance >= size &&
+           (pts[i] - pts[shown.first]).distance >= size)) {
+        shown.add(i);
+      }
+    }
+
+    // Keyed, so a handle keeps its drag while the dots around it come and
+    // go as edges grow and shrink.
+    Widget box(Key key, Offset at, Widget child) => Positioned(
+          key:    key,
+          left:   at.dx + shift.dx - size / 2,
+          top:    at.dy + shift.dy - size / 2,
+          width:  size,
+          height: size,
+          child:  child,
+        );
+    Widget dot(double d, Color fill) => Center(
+          child: Container(
+            width:  d / zoom,
+            height: d / zoom,
+            decoration: BoxDecoration(
+              color:  fill,
+              shape:  BoxShape.circle,
+              border: Border.all(color: Colors.black, width: 1.5 / zoom),
+            ),
+          ),
+        );
+
+    return [
+      // Midpoints first, so a point wins where they meet.
+      for (var k = 0; k < shown.length; k++)
+        if (onAddPoint != null &&
+            shown[(k + 1) % shown.length] == (shown[k] + 1) % pts.length &&
+            (pts[(shown[k] + 1) % pts.length] - pts[shown[k]]).distance >=
+                2 * size)
+          box(
+            ValueKey('mid-${shown[k]}'),
+            (pts[shown[k]] + pts[(shown[k] + 1) % pts.length]) / 2,
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onAddPoint!(m.id, shown[k],
+                  (pts[shown[k]] + pts[(shown[k] + 1) % pts.length]) / 2),
+              child: dot(8, Colors.white70),
+            ),
+          ),
+      for (final i in shown)
+        box(
+          ValueKey('point-$i'),
+          pts[i],
+          Listener(
+            onPointerDown:   (_) => hold(true),
+            onPointerUp:     (_) => hold(false),
+            onPointerCancel: (_) => hold(false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              dragStartBehavior: DragStartBehavior.down,
+              onPanUpdate: (d) => onMovePoint!(m.id, i, d.delta),
+              onDoubleTap: onRemovePoint == null || pts.length <= 3
+                  ? null
+                  : () => onRemovePoint!(m.id, i),
+              child: dot(11, Colors.white),
+            ),
+          ),
+        ),
+    ];
   }
 }
 

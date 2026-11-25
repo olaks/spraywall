@@ -54,6 +54,9 @@ Manual checklist (spec: Testing Decisions):
   [ ] Hold outlines on the sample wall, on Android and the web: a tap on a
       coloured hold traces it with no visible wait; a pale hold gives a
       circle; zoomed in on a small hold, the outline follows its edge
+  [ ] Outline fix-up on a phone: a selected outline's point handles are easy
+      to grab without moving the whole mark; drag one, tap a midpoint to
+      add one, double-tap one to remove it
   [ ] Export everything: the share sheet on Android, a save dialog on Linux,
       a download on the web; the .zip opens and holds backup.json + photos/
   [ ] Import that .zip on another platform: the summary adds everything,

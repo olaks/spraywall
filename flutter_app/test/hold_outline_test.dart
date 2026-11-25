@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spraywall/database/database.dart';
@@ -116,6 +117,51 @@ void main() {
                             (back.outline![i], grown.outline![i])]) {
       expect((a - b).distance, lessThan(1e-4), reason: 'four decimals');
     }
+  });
+
+  testApp("a traced outline's points fix it up: drag one, add one on an "
+      'edge, double-tap one away', (tester) async {
+    await pumpApp(tester, db);
+    await goTo(tester, '/walls/$wall/problems/new');
+    await tapPhoto(tester, hold);
+    final traced = marks(tester).single;
+    final n      = traced.outline!.length;
+
+    // At fit zoom the points crowd, so only some have handles; zoomed in,
+    // more of them do.
+    int handles() => find.byWidgetPredicate((w) =>
+        w.key is ValueKey<String> &&
+        (w.key! as ValueKey<String>).value.startsWith('point-')).evaluate().length;
+    final atFit = handles();
+    expect(atFit, inExclusiveRange(2, n));
+    await zoomTo(tester, 1, hold);
+    expect(handles(), greaterThan(atFit));
+
+    // Drag point 0 outward, 60 px away from the hold's middle.
+    final p0  = px(traced)[0];
+    final out = (p0 - hold) / (p0 - hold).distance * 60;
+    await drag(tester,
+        tester.getCenter(find.byKey(const ValueKey('point-0'))), out);
+    final pulled = marks(tester).single;
+    expect((px(pulled)[0] - (p0 + out)).distance, lessThan(3));
+    expect(px(pulled)[1], px(traced)[1], reason: 'the others stay');
+    expect(pulled.r, greaterThan(traced.r), reason: 'the circle refits');
+
+    // The edge from the dragged point is long now: its midpoint adds one.
+    await tester.tap(find.byKey(const ValueKey('mid-0')));
+    await tester.pump();
+    final added = marks(tester).single;
+    expect(added.outline, hasLength(n + 1));
+    expect((px(added)[1] - (px(pulled)[0] + px(pulled)[1]) / 2).distance,
+        lessThan(1));
+
+    // Double-tapped, the new point goes again.
+    final p1 = find.byKey(const ValueKey('point-1'));
+    await tester.tap(p1);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(p1);
+    await tester.pump(kDoubleTapTimeout);
+    expect(marks(tester).single.outline, hasLength(n));
   });
 
   testApp('a tap on bare wall places a circle', (tester) async {

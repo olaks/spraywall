@@ -1,4 +1,4 @@
-import 'dart:ui' show Size;
+import 'dart:ui' show Offset, Size;
 
 import 'package:flutter/foundation.dart';
 import '../database/database.dart';
@@ -160,6 +160,39 @@ class MarkEditorController extends ChangeNotifier {
       outline: o == null ? null : scaleOutline(o, r / m.r, m.cx, m.cy),
     ));
     if (o == null) _lastR[m.photoId] = r;
+    _changed();
+  }
+
+  /// Moves point [index] of an outline mark by [dcx], [dcy] (normalised),
+  /// kept on the photo. The mark's circle refits the new shape, on a photo
+  /// of [photo] pixels.
+  void movePoint(String id, int index, double dcx, double dcy, Size photo) {
+    final m = _byId(id);
+    final o = [...m.outline!];
+    o[index] = Offset((o[index].dx + dcx).clamp(0.0, 1.0),
+                      (o[index].dy + dcy).clamp(0.0, 1.0));
+    _reshape(m, o, photo);
+  }
+
+  /// Adds a point [at] (normalised) to an outline mark on the edge after
+  /// point [after], and returns its index.
+  int insertPoint(String id, int after, Offset at, Size photo) {
+    final m = _byId(id);
+    _reshape(m, [...m.outline!]..insert(after + 1, at), photo);
+    return after + 1;
+  }
+
+  /// Removes point [index] of an outline mark, which keeps at least three.
+  void removePoint(String id, int index, Size photo) {
+    final m = _byId(id);
+    if (m.outline!.length <= 3) return;
+    _reshape(m, [...m.outline!]..removeAt(index), photo);
+  }
+
+  void _reshape(EditMark m, Outline o, Size photo) {
+    final around = enclosingCircle(o, photo);
+    _replace(m.copyWith(
+        outline: o, cx: around.cx, cy: around.cy, r: around.r));
     _changed();
   }
 

@@ -22,6 +22,10 @@ const kMinHitScreenPx = 20.0;
 /// The resize handle's size, in screen pixels.
 const kHandleScreenPx = 26.0;
 
+/// An outline point handle's size, in screen pixels: what a thumb can pick
+/// out, and the closest two handles come.
+const kPointScreenPx = 22.0;
+
 /// Role colours, from the prototype.
 const roleColors = {
   Role.start:  Color(0xFF00E676),

@@ -341,6 +341,15 @@ class _EditorState extends ConsumerState<_Editor> {
                     id, d.dx / _photoSize.width, d.dy / _photoSize.height),
                 // r is a fraction of width, like the handle's drag.
                 onResize: (id, dx) => _marks.resize(id, dx / _photoSize.width),
+                // An outline's points, in photo px from the layer.
+                onMovePoint: (id, i, d) => _marks.movePoint(id, i,
+                    d.dx / _photoSize.width, d.dy / _photoSize.height,
+                    _photoSize),
+                onAddPoint: (id, after, at) => _marks.insertPoint(id, after,
+                    Offset(at.dx / _photoSize.width, at.dy / _photoSize.height),
+                    _photoSize),
+                onRemovePoint: (id, i) =>
+                    _marks.removePoint(id, i, _photoSize),
                 onHold: (h) => setState(() => _holding = h),
               ),
             ),
