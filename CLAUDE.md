@@ -58,6 +58,10 @@ an in-memory database, and widget tests. No goldens and no device tests; what
 only a device can show is on `release.sh`'s manual checklist. Each build
 ticket lists the tests that close it.
 
+The hold tracer is unit-tested on generated images; judge a change to it on
+the real photos too: `flutter test tool/trace_eval_test.dart` traces taps on
+`sample/` and writes contact sheets to `build/trace_eval/`.
+
 Shared helpers live in `test/helpers/`: `openTestDb()` (foreign keys on),
 seed builders that go through the app's own database API, `jpegFixture()`
 (generated JPEGs with optional EXIF orientation and fake GPS),

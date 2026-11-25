@@ -9,18 +9,34 @@ import 'package:spraywall/marks/outline.dart';
 import 'helpers/images.dart';
 
 /// A plywood-coloured wall with grain noise, and holds painted on it: each
-/// an ellipse (centre, radii in px) of one colour. Made in code: the real
-/// wall photo carries GPS and is never committed.
+/// an ellipse (centre, radii in px) of one colour. [chalk] smears go on the
+/// holds, near white at their middle and fading out to their edge, as chalk
+/// rubbed onto a hold does. Made in code: the real wall photo carries GPS and is
+/// never committed.
 PhotoPixels wall(int width, int height,
-    List<({Offset c, double rx, double ry, List<int> rgb})> holds) {
+    List<({Offset c, double rx, double ry, List<int> rgb})> holds,
+    {List<({Offset c, double rx, double ry})> chalk = const []}) {
   final rgba = Uint8List(width * height * 4);
   final rnd  = math.Random(7);
   for (var y = 0; y < height; y++) {
     for (var x = 0; x < width; x++) {
-      var rgb = [214, 186, 140];
+      var rgb    = [214, 186, 140];
+      var onHold = false;
       for (final h in holds) {
         final dx = (x + 0.5 - h.c.dx) / h.rx, dy = (y + 0.5 - h.c.dy) / h.ry;
-        if (dx * dx + dy * dy <= 1) rgb = h.rgb;
+        if (dx * dx + dy * dy <= 1) {
+          rgb    = h.rgb;
+          onHold = true;
+        }
+      }
+      for (final s in onHold ? chalk : const <Never>[]) {
+        final dx = (x + 0.5 - s.c.dx) / s.rx, dy = (y + 0.5 - s.c.dy) / s.ry;
+        final a  = (1 - math.sqrt(dx * dx + dy * dy)).clamp(0.0, 1.0);
+        rgb = [
+          for (var k = 0; k < 3; k++)
+            (rgb[k] + (const [238, 236, 230][k] - rgb[k]) * math.min(1, 2 * a))
+                .round(),
+        ];
       }
       final noise = rnd.nextInt(13) - 6;
       final i = (y * width + x) * 4;
@@ -86,6 +102,65 @@ void main() {
     ]);
     final poly = outlinePx(traceHold(px, const Offset(0.5, 0.5), 0.15)!, size);
     expect(pointInPolygon(const Offset(470, 300), poly), isFalse);
+  });
+
+  test('chalk in the middle of a hold, under the tap, is part of the hold', () {
+    // Chalk is near white: closer to the wall than to the hold's colour.
+    final px = wall(800, 600,
+        [(c: const Offset(400, 300), rx: 40, ry: 25, rgb: red)],
+        chalk: [(c: const Offset(400, 300), rx: 22, ry: 14)]);
+    final poly = outlinePx(traceHold(px, const Offset(0.5, 0.5), 0.15)!, size);
+    final truth = math.pi * 40 * 25;
+    expect(area(poly), inInclusiveRange(truth * 0.95, truth * 1.35));
+    expect(pointInPolygon(const Offset(365, 300), poly), isTrue);
+    expect(pointInPolygon(const Offset(350, 300), poly), isFalse);
+  });
+
+  test('chalk running out to the rim still traces the hold, not the wall', () {
+    // The chalk meets the wall at the rim with hardly an edge. It fades into
+    // the hold more softly than the wall stops the flood: a smear crisper
+    // than that, near white to red in a few pixels, would lead it out.
+    final px = wall(800, 600,
+        [(c: const Offset(400, 300), rx: 40, ry: 25, rgb: red)],
+        chalk: [(c: const Offset(428, 300), rx: 30, ry: 22)]);
+    final poly = outlinePx(
+        traceHold(px, const Offset(425 / 800, 0.5), 0.15)!, size);
+    expect(pointInPolygon(const Offset(365, 300), poly), isTrue);
+    expect(pointInPolygon(const Offset(400, 280), poly), isTrue);
+    // Not out into the wall past the chalk.
+    expect(pointInPolygon(const Offset(460, 300), poly), isFalse);
+    expect(area(poly), lessThan(math.pi * 40 * 25 * 1.35));
+  });
+
+  test('a hold among others packed close traces alone', () {
+    // A dense wall: the window around the tap is mostly other holds, of
+    // every colour, with narrow gaps of wall between them.
+    const colours = [
+      [30, 60, 200], [230, 200, 40], [40, 160, 70], [120, 60, 150],
+      [240, 120, 30], [60, 60, 60], [230, 90, 160], [90, 170, 220],
+    ];
+    final px = wall(800, 600, [
+      for (var i = 0; i < 25; i++)
+        (c: Offset(400 + (i % 5 - 2) * 96.0, 300 + (i ~/ 5 - 2) * 66.0),
+         rx: 44, ry: 29, rgb: i == 12 ? red : colours[i % colours.length]),
+    ]);
+    final poly = outlinePx(traceHold(px, const Offset(0.5, 0.5), 0.15)!, size);
+    expect(pointInPolygon(const Offset(365, 300), poly), isTrue);
+    expect(pointInPolygon(const Offset(435, 300), poly), isTrue);
+    for (final p in const [Offset(496, 300), Offset(304, 300),
+                           Offset(400, 366), Offset(400, 234)]) {
+      expect(pointInPolygon(p, poly), isFalse, reason: '$p');
+    }
+  });
+
+  test('a tap on a bolt in a hold traces the hold', () {
+    final px = wall(800, 600, [
+      (c: const Offset(400, 300), rx: 40, ry: 25, rgb: red),
+      (c: const Offset(400, 300), rx: 5,  ry: 5,  rgb: [30, 30, 30]),
+    ]);
+    final poly = outlinePx(traceHold(px, const Offset(0.5, 0.5), 0.15)!, size);
+    expect(pointInPolygon(const Offset(365, 300), poly), isTrue);
+    expect(pointInPolygon(const Offset(435, 300), poly), isTrue);
   });
 
   test('a tap on bare wall gives no outline', () {
