@@ -20,11 +20,12 @@ void main() {
   late AppDatabase db;
   late String      wall;
   late String      layout;
+  late String      photo;
   setUp(() async {
     db     = openTestDb();
     wall   = await seedWall(db, name: 'Home wall');
     layout = await currentLayoutId(db, wall);
-    await seedPhoto(db, layout,
+    photo  = await seedPhoto(db, layout,
         jpeg: jpegWithHold(centre: (800, 600), radius: 60));
   });
   tearDown(() => db.close());
@@ -162,6 +163,28 @@ void main() {
     await tester.tap(p1);
     await tester.pump(kDoubleTapTimeout);
     expect(marks(tester).single.outline, hasLength(n));
+  });
+
+  testApp("a hold another problem outlined keeps that outline: a tap on it "
+      'takes the saved shape, not a fresh trace', (tester) async {
+    // Fixed up by hand into a triangle, which no trace would give.
+    const fixed = [Offset(0.46, 0.44), Offset(0.56, 0.47), Offset(0.49, 0.56)];
+    final c     = enclosingCircle(fixed, photoSize);
+    await db.createProblem(layoutId: layout, name: 'Older',
+        setOn: DateTime(2026, 11, 20), marks: [
+      (id: newId(), photoId: photo, role: Role.hand,
+       cx: c.cx, cy: c.cy, r: c.r, outline: encodeOutline(fixed)),
+    ]);
+    await pumpApp(tester, db);
+    await goTo(tester, '/walls/$wall/problems/new');
+    await tapPhoto(tester, hold);
+    final reused = marks(tester).single;
+    expect(reused.outline, fixed);
+    expect((reused.cx, reused.cy, reused.r), (c.cx, c.cy, c.r));
+
+    // Off the triangle, on the bare wall, it's a circle as before.
+    await tapPhoto(tester, const Offset(300, 300));
+    expect(marks(tester).last.outline, isNull);
   });
 
   testApp('a tap on bare wall places a circle', (tester) async {

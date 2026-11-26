@@ -40,6 +40,15 @@ void main() {
     expect(c.r * photo.width, closeTo(111.80, 0.01));
   });
 
+  test('a saved outline under a tap: the newest that holds it', () {
+    const older = [Offset(0.40, 0.40), Offset(0.60, 0.40), Offset(0.5, 0.6)];
+    const apart = [Offset(0.8, 0.8), Offset(0.9, 0.8), Offset(0.85, 0.9)];
+    expect(savedOutlineAt([older, box, apart], const Offset(0.5, 0.5)), box);
+    expect(savedOutlineAt([box, older], const Offset(0.5, 0.5)), older);
+    expect(savedOutlineAt([older, box], const Offset(0.85, 0.85)), isNull);
+    expect(savedOutlineAt(const [], const Offset(0.5, 0.5)), isNull);
+  });
+
   group('editor', () {
     EditMark placed(MarkEditorController c) =>
         c.place('p', 0.5, 0.5, outline: box, photo: photo);

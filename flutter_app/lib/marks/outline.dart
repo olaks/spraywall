@@ -36,6 +36,13 @@ List<Offset> outlinePx(Outline o, Size photo) => [
       for (final p in o) Offset(p.dx * photo.width, p.dy * photo.height),
     ];
 
+/// Of the [saved] outlines, oldest first, the newest with [tap] inside it,
+/// both normalised: a hold already outlined, perhaps fixed up by hand, is
+/// taken as it was rather than traced again. Inside is the same in
+/// normalised and pixel terms, so the photo's size isn't needed.
+Outline? savedOutlineAt(Iterable<Outline> saved, Offset tap) =>
+    saved.where((o) => pointInPolygon(tap, o)).lastOrNull;
+
 /// The circle around [o], normalised like a mark: centred on the middle of
 /// its bounding box, through its farthest point, r a fraction of width.
 ({double cx, double cy, double r}) enclosingCircle(Outline o, Size photo) {

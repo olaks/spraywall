@@ -7,6 +7,7 @@ import '../../marks/mark_editor.dart';
 import '../../marks/mark_geometry.dart';
 import '../../marks/mark_layer.dart';
 import '../../marks/opening_photo.dart';
+import '../../marks/outline.dart';
 import '../../providers/app_providers.dart';
 import '../../utils/format_utils.dart';
 import '../../utils/undo_snackbar.dart';
@@ -271,8 +272,10 @@ class _EditorState extends ConsumerState<_Editor> {
     final photo    = _photo;
     final view     = _view(photo.id);
     final selected = _marks.selected;
-    // Decoded as soon as the photo is on screen, ready for the first tap.
+    // Decoded as soon as the photo is on screen, ready for the first tap;
+    // the layout's saved outlines likewise.
     ref.watch(photoPixelsProvider(photo.id));
+    ref.watch(layoutMarksProvider(widget.layout.id));
     final hint     = _marks.marks.isEmpty
         ? null
         : switch ((_marks.hasStart, _marks.hasFinish)) {
@@ -324,15 +327,22 @@ class _EditorState extends ConsumerState<_Editor> {
                 selectedId: selected?.id,
                 onTapEmpty: (p) {
                   final (cx, cy) = normalise(p, _photoSize);
-                  // The hold's outline when the photo's pixels are in and
-                  // there's a hold to trace, otherwise a circle. Zoomed in,
-                  // the tracer looks closer.
+                  // A hold another problem has outlined keeps that outline,
+                  // fixed up or not. Otherwise the hold's traced outline
+                  // when the photo's pixels are in and there's a hold to
+                  // trace, else a circle. Zoomed in, the tracer looks closer.
+                  final saved   = savedOutlineAt([
+                    for (final m in ref.read(
+                        layoutMarksProvider(widget.layout.id)).value ??
+                        const <Mark>[])
+                      if (m.photoId == photo.id) ?decodeOutline(m.outline),
+                  ], Offset(cx, cy));
                   final pixels  = ref.read(photoPixelsProvider(photo.id)).value;
-                  final outline = pixels == null
+                  final outline = saved ?? (pixels == null
                       ? null
                       : traceHold(pixels, Offset(cx, cy),
                           traceRadius(view.value.getMaxScaleOnAxis(),
-                              _photoSize.width));
+                              _photoSize.width)));
                   _marks.place(photo.id, cx, cy,
                       outline: outline, photo: _photoSize);
                 },
