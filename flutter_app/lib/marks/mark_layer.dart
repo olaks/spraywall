@@ -44,6 +44,12 @@ class MarkLayer extends StatelessWidget {
   /// True while the selected mark or one of its handles is pressed.
   final ValueChanged<bool>? onHold;
 
+  /// Set, the layer draws instead: a one-finger stroke over the photo is a
+  /// hold's outline, given in photo pixels when the finger lifts, painted in
+  /// [drawRole]'s colour as it goes. Marks don't take gestures meanwhile.
+  final ValueChanged<List<Offset>>? onDraw;
+  final Role                        drawRole;
+
   const MarkLayer({
     super.key,
     required this.photo,
@@ -58,6 +64,8 @@ class MarkLayer extends StatelessWidget {
     this.onAddPoint,
     this.onRemovePoint,
     this.onHold,
+    this.onDraw,
+    this.drawRole = Role.hand,
   });
 
   @override
@@ -78,6 +86,11 @@ class MarkLayer extends StatelessWidget {
             ),
             // Selected last: it paints on top and wins hit tests.
             for (final m in marks) _markWidget(m, zoom),
+            if (onDraw != null)
+              Positioned.fill(
+                child: _DrawPad(
+                    role: drawRole, zoom: zoom, onDraw: onDraw!),
+              ),
           ]);
         },
       );
@@ -287,4 +300,58 @@ class _MarkPainter extends CustomPainter {
   bool shouldRepaint(_MarkPainter o) =>
       o.role != role || o.rPx != rPx || o.zoom != zoom ||
       o.selected != selected || o.half != half || o.outline != outline;
+}
+
+/// Takes a finger's stroke over the photo and paints it as it goes.
+class _DrawPad extends StatefulWidget {
+  final Role                       role;
+  final double                     zoom;
+  final ValueChanged<List<Offset>> onDraw;
+  const _DrawPad({required this.role, required this.zoom, required this.onDraw});
+
+  @override
+  State<_DrawPad> createState() => _DrawPadState();
+}
+
+class _DrawPadState extends State<_DrawPad> {
+  List<Offset> _stroke = const [];
+
+  void _end() {
+    final stroke = _stroke;
+    setState(() => _stroke = const []);
+    widget.onDraw(stroke);
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        key: const ValueKey('draw-pad'),
+        behavior: HitTestBehavior.opaque,
+        // From the pointer-down, so the outline starts where the finger did.
+        dragStartBehavior: DragStartBehavior.down,
+        onPanStart:  (d) => setState(() => _stroke = [d.localPosition]),
+        onPanUpdate: (d) => setState(() => _stroke = [..._stroke, d.localPosition]),
+        onPanEnd:    (_) => _end(),
+        onPanCancel: () => setState(() => _stroke = const []),
+        child: CustomPaint(
+          painter: _StrokePainter(_stroke, widget.role, widget.zoom),
+        ),
+      );
+}
+
+class _StrokePainter extends CustomPainter {
+  final List<Offset> stroke;
+  final Role         role;
+  final double       zoom;
+  _StrokePainter(this.stroke, this.role, this.zoom);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (stroke.length < 2) return;
+    strokeMark(canvas, Path()..addPolygon(stroke, false), roleColors[role]!,
+        3.5 / zoom);
+  }
+
+  @override
+  bool shouldRepaint(_StrokePainter o) =>
+      o.stroke != stroke || o.role != role || o.zoom != zoom;
 }

@@ -111,6 +111,9 @@ class _EditorState extends ConsumerState<_Editor> {
   bool _detailsChanged = false;
   bool _holding = false;
 
+  /// Drawing outlines by finger instead of tapping holds to trace them.
+  bool _drawing = false;
+
   /// The photo on screen, and each photo's pan and zoom while the editor is
   /// open.
   late String _photoId = widget.opening;
@@ -319,7 +322,8 @@ class _EditorState extends ConsumerState<_Editor> {
               key:        ValueKey(photo.id),
               photo:      photo,
               controller: view,
-              panEnabled: !_holding,
+              // One finger draws while drawing; two still zoom.
+              panEnabled: !_holding && !_drawing,
               overlay: MarkLayer(
                 photo:      _photoSize,
                 controller: view,
@@ -361,6 +365,15 @@ class _EditorState extends ConsumerState<_Editor> {
                 onRemovePoint: (id, i) =>
                     _marks.removePoint(id, i, _photoSize),
                 onHold: (h) => setState(() => _holding = h),
+                // A drawn outline is a new mark, like a traced one. A
+                // stroke that encloses nothing (a flick) isn't.
+                drawRole: _marks.brush,
+                onDraw: !_drawing ? null : (stroke) {
+                  final outline = simplifyOutline(stroke, _photoSize);
+                  if (outline == null) return;
+                  _marks.place(photo.id, outline.first.dx, outline.first.dy,
+                      outline: outline, photo: _photoSize);
+                },
               ),
             ),
             if (hint != null)
@@ -381,6 +394,8 @@ class _EditorState extends ConsumerState<_Editor> {
             onRole:   _marks.chooseRole,
             onTrash:  selected == null ? null : _trash,
             onDone:   selected == null ? null : () => _marks.select(null),
+            drawing:  _drawing,
+            onDraw:   () => setState(() => _drawing = !_drawing),
             sideBar:  wide,
           );
           return wide
@@ -416,6 +431,8 @@ class _Palette extends StatelessWidget {
   final ValueChanged<Role> onRole;
   final VoidCallback?      onTrash;
   final VoidCallback?      onDone;
+  final bool               drawing;
+  final VoidCallback       onDraw;
   final bool               sideBar;
 
   const _Palette({
@@ -423,6 +440,8 @@ class _Palette extends StatelessWidget {
     required this.onRole,
     required this.onTrash,
     required this.onDone,
+    required this.drawing,
+    required this.onDraw,
     required this.sideBar,
   });
 
@@ -448,6 +467,19 @@ class _Palette extends StatelessWidget {
         ),
     ];
     final actions = [
+      IconButton(
+        key:          const ValueKey('draw'),
+        tooltip:      drawing ? 'Stop drawing' : 'Draw an outline',
+        isSelected:   drawing,
+        icon:         const Icon(Icons.gesture),
+        selectedIcon: const Icon(Icons.gesture),
+        style: drawing
+            ? IconButton.styleFrom(
+                backgroundColor:
+                    Theme.of(context).colorScheme.secondaryContainer)
+            : null,
+        onPressed:    onDraw,
+      ),
       IconButton(
         tooltip:   'Delete mark',
         icon:      const Icon(Icons.delete_outline),

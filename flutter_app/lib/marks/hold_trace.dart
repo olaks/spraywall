@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show Offset;
+import 'dart:ui' show Offset, Size;
 
 import 'package:image/image.dart' as img;
 
@@ -97,9 +97,6 @@ const _barrier = 24.0;
 /// How clearly a larger region must be ringed, against the most clearly
 /// ringed one, to be taken for the hold instead.
 const _nearBest = 0.75;
-
-/// Points an outline keeps, at most.
-const _maxPoints = 64;
 
 /// The outline of the hold at [tap] (normalised), looking [radius] (a
 /// fraction of the photo's width) around it; null when there's no hold to
@@ -328,17 +325,8 @@ Outline? traceHold(PhotoPixels px, Offset tap, double radius) {
     for (final (gx, gy) in contour)
       Offset(x0 + (gx + 0.5) * step, y0 + (gy + 0.5) * step),
   ];
-  var eps = 0.6 * step;
-  var simple = _simplifyClosed(pts, eps);
-  while (simple.length > _maxPoints) {
-    eps *= 1.5;
-    simple = _simplifyClosed(pts, eps);
-  }
-  if (simple.toSet().length < 3 || _area(simple) < step * step) return null;
-  return [
-    for (final p in simple)
-      Offset((p.dx / w).clamp(0.0, 1.0), (p.dy / h).clamp(0.0, 1.0)),
-  ];
+  return simplifyOutline(pts, Size(w.toDouble(), h.toDouble()),
+      minCut: 0.6 * step, minArea: step * step.toDouble());
 }
 
 // ── Colour ─────────────────────────────────────────────────────────────────
@@ -530,57 +518,3 @@ List<(int, int)> _traceContour(Uint8List m, int w, int h) {
   }
   return contour;
 }
-
-// ── Simplify ───────────────────────────────────────────────────────────────
-
-/// A closed polygon simplified by Douglas–Peucker, split at its two points
-/// farthest apart so neither half is degenerate.
-List<Offset> _simplifyClosed(List<Offset> pts, double eps) {
-  if (pts.length < 4) return pts;
-  var far = 0;
-  var best = 0.0;
-  for (var i = 1; i < pts.length; i++) {
-    final d = (pts[i] - pts[0]).distanceSquared;
-    if (d > best) {
-      best = d;
-      far = i;
-    }
-  }
-  final a = _dp(pts.sublist(0, far + 1), eps);
-  final b = _dp([...pts.sublist(far), pts[0]], eps);
-  return [...a.sublist(0, a.length - 1), ...b.sublist(0, b.length - 1)];
-}
-
-List<Offset> _dp(List<Offset> pts, double eps) {
-  if (pts.length < 3) return pts;
-  final a = pts.first, b = pts.last;
-  var idx = 0;
-  var max = 0.0;
-  for (var i = 1; i < pts.length - 1; i++) {
-    final d = _lineDistance(pts[i], a, b);
-    if (d > max) {
-      max = d;
-      idx = i;
-    }
-  }
-  if (max <= eps) return [a, b];
-  final left = _dp(pts.sublist(0, idx + 1), eps);
-  return [...left.sublist(0, left.length - 1), ..._dp(pts.sublist(idx), eps)];
-}
-
-double _area(List<Offset> p) {
-  var s = 0.0;
-  for (var i = 0; i < p.length; i++) {
-    final a = p[i], b = p[(i + 1) % p.length];
-    s += a.dx * b.dy - b.dx * a.dy;
-  }
-  return s.abs() / 2;
-}
-
-double _lineDistance(Offset p, Offset a, Offset b) {
-  final ab  = b - a;
-  final len = ab.distance;
-  if (len == 0) return (p - a).distance;
-  return ((p.dx - a.dx) * ab.dy - (p.dy - a.dy) * ab.dx).abs() / len;
-}
-

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +39,29 @@ void main() {
     expect(c.cy, closeTo(0.5, 1e-9));
     // The corner is √(100² + 50²) px from the centre; r is of width.
     expect(c.r * photo.width, closeTo(111.80, 0.01));
+  });
+
+  test("a finger's stroke or a traced edge, simplified to a handful of "
+      'points that keep its shape', () {
+    // A circle of 100 px drawn in 300 steps.
+    final stroke = [
+      for (var i = 0; i < 300; i++)
+        const Offset(1000, 500) +
+            Offset.fromDirection(i / 300 * 2 * math.pi, 100),
+    ];
+    final o = simplifyOutline(stroke, photo)!;
+    expect(o.length, inInclusiveRange(6, 16));
+    final c = enclosingCircle(o, photo);
+    expect(c.cx, closeTo(0.5, 0.01));
+    expect(c.r * photo.width, closeTo(100, 5));
+    for (final p in outlinePx(o, photo)) {
+      expect((p - const Offset(1000, 500)).distance, closeTo(100, 6));
+    }
+
+    // Not a shape: too few points, or too little inside.
+    expect(simplifyOutline(stroke.take(2).toList(), photo), isNull);
+    expect(simplifyOutline(const [Offset(10, 10), Offset(14, 10), Offset(12, 13)],
+        photo, minArea: 64), isNull);
   });
 
   test('a saved outline under a tap: the newest that holds it', () {

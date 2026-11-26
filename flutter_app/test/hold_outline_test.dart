@@ -187,6 +187,53 @@ void main() {
     expect(marks(tester).last.outline, isNull);
   });
 
+  testApp('with Draw on, a finger draws an outline: a new mark, simplified, '
+      'and the photo stays put; a slip draws nothing', (tester) async {
+    await pumpApp(tester, db);
+    await goTo(tester, '/walls/$wall/problems/new');
+    await zoomTo(tester, 1, const Offset(300, 300));
+    await tester.tap(find.byKey(const ValueKey('draw')));
+    await tester.pump();
+    final view = controller(tester).value.clone();
+
+    // A 120 px square on bare wall, drawn in many small steps.
+    const corners = [Offset(240, 240), Offset(360, 240), Offset(360, 360),
+                     Offset(240, 360), Offset(240, 240)];
+    final gesture = await tester.startGesture(screen(tester, corners.first));
+    for (var k = 0; k < 4; k++) {
+      for (var i = 1; i <= 12; i++) {
+        await gesture.moveTo(screen(tester,
+            Offset.lerp(corners[k], corners[k + 1], i / 12)!));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
+    await gesture.up();
+    await tester.pump();
+
+    expect(controller(tester).value, view, reason: 'the pad, not the photo, '
+        'takes the finger');
+    final drawn = marks(tester).single;
+    expect(drawn.outline!.length, inInclusiveRange(4, 16));
+    for (final p in px(drawn)) {
+      expect(p.dx, inInclusiveRange(236, 364));
+      expect(p.dy, inInclusiveRange(236, 364));
+    }
+    expect(drawn.cx * 1600, closeTo(300, 4));
+
+    // A flick encloses nothing: no mark.
+    await drag(tester, screen(tester, const Offset(600, 900)),
+        const Offset(80, 10));
+    expect(marks(tester), hasLength(1));
+
+    // Draw off: a tap traces again.
+    await tester.tap(find.byKey(const ValueKey('draw')));
+    await tester.pump();
+    await zoomTo(tester, 1, hold);
+    await tapPhoto(tester, hold);
+    expect(marks(tester), hasLength(2));
+    expect(marks(tester).last.outline, isNotNull);
+  });
+
   testApp('a tap on bare wall places a circle', (tester) async {
     await pumpApp(tester, db);
     await goTo(tester, '/walls/$wall/problems/new');

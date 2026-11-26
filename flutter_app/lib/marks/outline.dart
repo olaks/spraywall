@@ -189,3 +189,85 @@ bool _segmentsMeet(Offset p1, Offset p2, Offset q1, Offset q2) {
       _segmentDistance(q1, p1, p2) <= _slack ||
       _segmentDistance(q2, p1, p2) <= _slack;
 }
+
+/// Points an outline keeps, at most: few enough that each has a handle a
+/// thumb can grab. And how far, as a share of the hold's size across, an
+/// outline may cut a corner to keep fewer.
+const _maxPoints = 16;
+const _cornerCut = 0.04;
+
+/// A hold's outline from a closed path of [px] (photo pixels, on a photo of
+/// [photo] pixels): a traced edge or a finger's stroke, simplified to a
+/// handful of points that keep its shape. Corners are cut by at least
+/// [minCut] px. Null when it isn't a shape: fewer than three points, or
+/// less than [minArea] px² inside.
+Outline? simplifyOutline(List<Offset> px, Size photo,
+    {double minCut = 0, double minArea = 1}) {
+  if (px.length < 3) return null;
+  var eps    = math.max(minCut, _cornerCut * math.sqrt(_area(px)));
+  var simple = _simplifyClosed(px, eps);
+  while (simple.length > _maxPoints) {
+    eps   *= 1.5;
+    simple = _simplifyClosed(px, eps);
+  }
+  if (simple.toSet().length < 3 || _area(simple) < minArea) return null;
+  return [
+    for (final p in simple)
+      Offset((p.dx / photo.width).clamp(0.0, 1.0),
+             (p.dy / photo.height).clamp(0.0, 1.0)),
+  ];
+}
+
+// ── Simplify ───────────────────────────────────────────────────────────────
+
+/// A closed polygon simplified by Douglas–Peucker, split at its two points
+/// farthest apart so neither half is degenerate.
+List<Offset> _simplifyClosed(List<Offset> pts, double eps) {
+  if (pts.length < 4) return pts;
+  var far = 0;
+  var best = 0.0;
+  for (var i = 1; i < pts.length; i++) {
+    final d = (pts[i] - pts[0]).distanceSquared;
+    if (d > best) {
+      best = d;
+      far = i;
+    }
+  }
+  final a = _dp(pts.sublist(0, far + 1), eps);
+  final b = _dp([...pts.sublist(far), pts[0]], eps);
+  return [...a.sublist(0, a.length - 1), ...b.sublist(0, b.length - 1)];
+}
+
+List<Offset> _dp(List<Offset> pts, double eps) {
+  if (pts.length < 3) return pts;
+  final a = pts.first, b = pts.last;
+  var idx = 0;
+  var max = 0.0;
+  for (var i = 1; i < pts.length - 1; i++) {
+    final d = _lineDistance(pts[i], a, b);
+    if (d > max) {
+      max = d;
+      idx = i;
+    }
+  }
+  if (max <= eps) return [a, b];
+  final left = _dp(pts.sublist(0, idx + 1), eps);
+  return [...left.sublist(0, left.length - 1), ..._dp(pts.sublist(idx), eps)];
+}
+
+double _area(List<Offset> p) {
+  var s = 0.0;
+  for (var i = 0; i < p.length; i++) {
+    final a = p[i], b = p[(i + 1) % p.length];
+    s += a.dx * b.dy - b.dx * a.dy;
+  }
+  return s.abs() / 2;
+}
+
+double _lineDistance(Offset p, Offset a, Offset b) {
+  final ab  = b - a;
+  final len = ab.distance;
+  if (len == 0) return (p - a).distance;
+  return ((p.dx - a.dx) * ab.dy - (p.dy - a.dy) * ab.dx).abs() / len;
+}
+

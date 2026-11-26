@@ -57,6 +57,8 @@ Manual checklist (spec: Testing Decisions):
   [ ] Outline fix-up on a phone: a selected outline's point handles are easy
       to grab without moving the whole mark; drag one, tap a midpoint to
       add one, double-tap one to remove it
+  [ ] Draw on a phone: one finger draws a hold's outline and the photo
+      doesn't pan; two fingers still zoom; Draw off, a tap traces again
   [ ] Export everything: the share sheet on Android, a save dialog on Linux,
       a download on the web; the .zip opens and holds backup.json + photos/
   [ ] Import that .zip on another platform: the summary adds everything,
